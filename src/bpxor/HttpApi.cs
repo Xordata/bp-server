@@ -293,6 +293,14 @@ static class HttpApi{
 			return File(data,ctype,fname);
 		}));
 		// ---------- Фаза 4: Web Push + состояние будильника ----------
+		// установщик десктопной версии: BpMonitorSetup.exe кладётся рядом с бинарём bpxor (сборка — BPMonitor\deploy\BpMonitor.iss)
+		// AuthGate незнакомые GET пропускает (механика статики) — гейт сессии здесь
+		app.MapMethods("/download",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>{
+			if(ctx.Items["profile"]==null) return Results.Redirect("/login");
+			string p=Path.Combine(AppContext.BaseDirectory,"BpMonitorSetup.exe");
+			if(!System.IO.File.Exists(p)) return Results.NotFound("Установщик не размещён на сервере");
+			return Results.File(System.IO.File.ReadAllBytes(p),"application/vnd.microsoft.portable-executable","BpMonitorSetup.exe");
+		});
 		app.MapMethods("/api/push/vapidkey",new[]{HttpMethods.Get,HttpMethods.Head},()=>Json(new{key=VapidKeys.PublicKey}));
 		app.MapPost("/api/push/subscribe",ctx=>Post(ctx,(p,jo,body)=>{
 			string ep=(string)jo["endpoint"]??"";
