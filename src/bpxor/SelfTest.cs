@@ -445,6 +445,17 @@ partial class Profile
 			if(VapidKeys.PublicKey!=pub) throw new Exception("ключи не персистятся");
 			Directory.Delete(dir,true);
 		});
+		check("F1/F2: PWA-статика на месте (q.html, манифест, иконки)",()=>{
+			string bin=AppContext.BaseDirectory;// ExeDir тут — временная песочница selftest, а не каталог бинаря
+			foreach(string f in new string[]{"q.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"})
+				if(!File.Exists(Path.Combine(bin,f))) throw new Exception("нет "+f+" рядом с бинарём (csproj CopyToOutputDirectory?)");
+			string q=File.ReadAllText(Path.Combine(bin,"q.html"));
+			if(q.IndexOf("q-sys")<0||q.IndexOf("/api/measurement")<0) throw new Exception("q.html неполный");
+			JObject mf=JObject.Parse(File.ReadAllText(Path.Combine(bin,"manifest.webmanifest")));
+			if(((JArray)mf["icons"]).Count<2) throw new Exception("в манифесте <2 иконок");
+			if((string)mf["shortcuts"]?[0]?["url"]!="/q") throw new Exception("shortcut /q не в манифесте");
+			if(!File.Exists(Path.Combine(bin,"alarm.mp3"))) throw new Exception("alarm.mp3 не рядом с бинарём");
+		});
 		Thread.CurrentThread.CurrentCulture=savedCulture;
 		Console.WriteLine(failed==0?"SELFTEST OK":"SELFTEST FAILED: "+failed);
 		return failed;

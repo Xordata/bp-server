@@ -1,0 +1,26 @@
+{
+  "name": "Дневник давления",
+  "short_name": "Дневник АД",
+  "description": "Дневник артериального давления: замеры, прогноз модели, будильники",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f6f3",
+  "theme_color": "#2f5d8a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Быстрый замер",
+      "short_name": "Замер",
+      "description": "Верх/низ/пульс за 5 секунд",
+      "url": "/q",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

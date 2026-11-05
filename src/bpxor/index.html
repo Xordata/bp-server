@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f5d8a">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Дневник АД">
 <title>BpMonitor</title>
 <style>
 :root{--bd:#c9c9c4}
@@ -69,6 +74,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
   <button onclick="stopRing(true);flash('Звук остановлен')" title="Остановить звук вкладки">⏹ звук</button>
   <button id="ring-stop" style="display:none;background:#b71c1c;border-color:#b71c1c;color:#fff" onclick="stopRing(true)">⏹ Стоп будильника</button>
   <span style="flex:1"></span>
+  <button onclick="location.href='/q'" title="Быстрый замер">⚡ замер</button>
   <button onclick="loadState()" title="Обновить">⟳</button>
 </header>
 <nav id="tabs"></nav>

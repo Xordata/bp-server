@@ -73,7 +73,7 @@ static class Program{
 		bool isApi=path.StartsWith("/api/");
 		if(s==null){
 			if(isApi){ ctx.Response.StatusCode=401; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"не авторизован\"}"); return; }
-			if(path=="/"||path=="/index.html"||path=="/alarm.mp3"){ ctx.Response.Redirect("/login"); return; }
+			if(path=="/"||path=="/index.html"||path=="/alarm.mp3"||path=="/q"){ ctx.Response.Redirect("/login"); return; }
 			await next(); return;
 		}
 		Profile p=UserStore.GetOrCreate(s.Uid);

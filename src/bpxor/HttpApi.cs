@@ -33,6 +33,14 @@ static class HttpApi{
 			string p=Path.Combine(AppContext.BaseDirectory,"alarm.mp3");
 			return System.IO.File.Exists(p)?Results.File(p,"audio/mpeg"):Results.NotFound();
 		});
+		// F1/F2: PWA-манифест, страница быстрого замера, иконки (все за сессией — AuthGate)
+		app.MapMethods("/q",new[]{HttpMethods.Get,HttpMethods.Head},()=>StaticText("q.html","text/html; charset=utf-8"));
+		app.MapMethods("/manifest.webmanifest",new[]{HttpMethods.Get,HttpMethods.Head},()=>StaticText("manifest.webmanifest","application/manifest+json"));
+		app.MapGet("/icons/{file}",(string file)=>{
+			if(file==null||!System.Text.RegularExpressions.Regex.IsMatch(file,"^[a-z0-9-]+[.]png$")) return Results.NotFound();
+			string p=Path.Combine(AppContext.BaseDirectory,"icons",file);
+			return System.IO.File.Exists(p)?Results.File(p,"image/png"):Results.NotFound();
+		});
 
 		// ---------- GET ----------
 		app.MapMethods("/api/state",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>Json(P(ctx).StateJson()))());
@@ -269,6 +277,11 @@ static class HttpApi{
 		});
 	}
 
+	static IResult StaticText(string fname,string ctype){
+		string p=Path.Combine(AppContext.BaseDirectory,fname);
+		if(!System.IO.File.Exists(p)) return Results.NotFound();
+		return Results.Content(System.IO.File.ReadAllText(p),ctype);
+	}
 	static IResult Index(){
 		string ip=Path.Combine(AppContext.BaseDirectory,"index.html");
 		if(System.IO.File.Exists(ip)){
