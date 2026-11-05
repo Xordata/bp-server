@@ -3,6 +3,7 @@
   "short_name": "Дневник АД",
   "description": "Дневник артериального давления: замеры, прогноз модели, будильники",
   "lang": "ru",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

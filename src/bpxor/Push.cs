@@ -88,7 +88,9 @@ static class PushStore{
 		string payload=JObject.FromObject(new{title,body,tag="bpxor",renotify=true,vibrate=new[]{300,150,300,150,300}}).ToString(Formatting.None);
 		var push=new WebPush.WebPushClient();
 		push.SetVapidDetails(VapidKeys.Subject,VapidKeys.PublicKey,VapidKeys.PrivateKey);
-		var headers=new Dictionary<string,object>{{"TTL",60}};// просроченное не копить (Urgency этот вариант библиотеки не принимает)
+		// TTL 1 ч: 60 с не доживал до телефона в doze (FCM отдаёт очередь при пробуждении — «на телефон пуши не приходят»).
+		// tag+renotify в payload: задержанные дубли заменяют друг друга, а не копятся (Urgency этот вариант библиотеки не принимает)
+		var headers=new Dictionary<string,object>{{"TTL",3600}};
 		bool any=false;
 		foreach(Sub s in subs){
 			try{

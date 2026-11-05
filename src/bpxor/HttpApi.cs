@@ -312,6 +312,15 @@ static class HttpApi{
 			subs=PushStore.Count(P(ctx).Uid),
 			vapid=!string.IsNullOrWhiteSpace(VapidKeys.PublicKey),
 			email=Program.ACfg.SmtpUser!=""}));
+		// диагностика: разослать тестовый push всем подпискам аккаунта (кнопка в UI — проверить, доходит ли до этого устройства)
+		app.MapPost("/api/push/test",ctx=>Post(ctx,(p,jo,body)=>{
+			int subs=PushStore.Count(p.Uid);
+			if(subs==0) return Json(new{ok=false,err="у этого аккаунта нет подписок — включите push на этом устройстве"});
+			bool sent=false;
+			try{ var t=PushStore.SendToUser(p.Uid,"Тест push","Проверка доставки (подписок: "+subs+")"); sent=t.Wait(TimeSpan.FromSeconds(25))&&t.Result; }
+			catch(Exception ex){ return Json(new{ok=false,err=ex.Message}); }
+			return Json(new{ok=sent,subs=subs,err=sent?"":"ни одна подписка не приняла (см. журнал сервера)"});
+		}));
 		app.MapMethods("/api/alarm/state",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>{
 			Profile pr=P(ctx);
 			AlarmScheduler.State st=AlarmScheduler.State.Load(System.IO.Path.Combine(UserStore.DirFor(pr.Uid),"alarms.json"));

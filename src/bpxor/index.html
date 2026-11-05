@@ -219,6 +219,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
       <h3>Уведомления</h3>
       <div class="grid">
         <button id="push-btn" onclick="pushToggle()">🔔 Включить push-уведомления</button>
+        <button onclick="pushTest()">📡 Тест доставки</button>
         <span id="push-state" class="mut"></span>
       </div>
       <div class="grid" style="margin-top:6px">
@@ -294,7 +295,10 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
     </section>
     <section>
       <h3>Устройства (синхронизация с десктопом)</h3>
-      <div class="grid"><button onclick="openDevCreate()">＋ Создать токен</button></div>
+      <div class="grid">
+        <button onclick="openDevCreate()">＋ Создать токен</button>
+        <button id="inst-btn" style="display:none" onclick="installPwa()">📲 Установить на телефон</button>
+      </div>
       <div style="margin-top:8px"><table id="dev-t"><thead><tr><th>Имя</th><th>Создан</th><th>Последнее исп.</th><th></th></tr></thead><tbody></tbody></table></div>
       <p class="mut" style="margin:6px 0 0">Токен показывается один раз и на сервере не хранится (только его хэш). Отзыв мгновенно отключает устройство.</p>
     </section>
@@ -1273,14 +1277,22 @@ async function renderPush(){
     el.textContent=st&&st.vapid?"VAPID готов":"VAPID не настроен";
   }
 }
+async function pushTest(){flash("Тест push: отправляю…");const j=await apiPost("/api/push/test",{});
+  flash(j.ok?("Push отправлен всем подпискам (всего: "+j.subs+")"):("Не доставлено: "+(j.err||"?")),!!j.ok,6000);}
 async function toggleEmailAl(on){
   S.cfg.EmailFallback=on;
   const j=await apiPost("/api/config",S.cfg);
   flash(j.ok?"Сохранено":"Ошибка",!!j.ok);loadState();
 }
 
+/* ---------- установка PWA на телефон (после удаления шортката Chrome не всегда предлагает сам) ---------- */
+let _bip=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();_bip=e;const b=$("inst-btn");if(b)b.style.display="";});
+window.addEventListener("appinstalled",()=>{const b=$("inst-btn");if(b)b.style.display="none";_bip=null;});
+async function installPwa(){if(!_bip)return;try{await _bip.prompt();await _bip.userChoice;_bip=null;const b=$("inst-btn");if(b)b.style.display="none";}catch(e){}}
 /* ---------- старт ---------- */
 document.addEventListener("DOMContentLoaded",()=>{
+	if(matchMedia("(display-mode: standalone)").matches){const b=$("inst-btn");if(b)b.style.display="none";}
 	loadState();
 	if("serviceWorker" in navigator){
 		navigator.serviceWorker.register("/sw.js").then(()=>{
