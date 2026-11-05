@@ -24,6 +24,7 @@ public class AuthCfg{
 	public int SessionDays=30;
 	public int Port=8090;
 	public bool SecureCookies=true;// false — только для локальной разработки по http: куки срабатывают без TLS
+	public int MaxConcurrentJobs=1;// глобальная очередь фоновых задач (решение: 2 vCPU — тяжёлые job'ы последовательно)
 }
 
 static class MaddyAuth{

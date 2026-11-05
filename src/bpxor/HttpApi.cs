@@ -218,10 +218,13 @@ static class HttpApi{
 			long after=System.IO.File.Exists(p.DataBinPath)?new FileInfo(p.DataBinPath).Length:0;
 			return Json(new{ok=true,before=before,after=after});
 		}));
-		app.MapPost("/api/weather/refresh",ctx=>Post(ctx,(p,jo,body)=>{
-			p.PollWeatherAsync().GetAwaiter().GetResult();
-			return Json(new{ok=true});
-		}));
+		// ВАЖНО: вне Post()/lock(Sync): PollWeatherAsync в конце вызывает MaybePopup, который сам
+		// берёт Sync — sync-over-async под lock(Sync) давал бы взаимоблокировку.
+		app.MapPost("/api/weather/refresh",async ctx=>{
+			Profile pr=(Profile)ctx.Items["profile"];
+			await pr.PollWeatherAsync();
+			await Json(new{ok=true}).ExecuteAsync(ctx);
+		});
 		app.MapPost("/api/export",ctx=>Post(ctx,(p,jo,body)=>{
 			string kind=jo["kind"]!=null?jo["kind"].ToString():"rows";
 			string fmt=jo["fmt"]!=null?jo["fmt"].ToString():"csv";
@@ -272,8 +275,9 @@ static class HttpApi{
 		if(kind=="backfill"&&jo!=null&&jo["force_until"]!=null){ try{ fu=p.JT(jo,"force_until"); }catch{} }
 		int holdout=0;
 		if((kind=="validate"||kind=="tune")&&jo!=null&&jo["holdout"]!=null){ int.TryParse((string)jo["holdout"],out holdout); }
-		Task.Run(()=>{
+		bool startedNow=JobGate.Run(()=>{
 			try{
+				p.JobQueued=false;
 				lock(p.Sync){
 					switch(kind){
 						case"train_ga":{ double loss=p.TrainGenetic(); p.JobResult="MSE="+Math.Round(loss,4); p.SaveNn(); break; }
@@ -294,8 +298,8 @@ static class HttpApi{
 				}
 			} catch(Exception ex){ p.JobError=ex.Message; p.Log(kind+": "+ex.Message); }
 			finally{ p.FinishJob(); }
-		});
-		await Json(new{ok=true,started=true}).ExecuteAsync(ctx);
+		},()=>p.JobQueued=true);
+		await Json(new{ok=true,started=true,queued=!startedNow}).ExecuteAsync(ctx);
 	}
 }
 }

@@ -41,7 +41,12 @@ partial class Profile
 			string url;
 			url=string.Format(CultureInfo.InvariantCulture,"https://api.open-meteo.com/v1/forecast?latitude={0}&longitude={1}&current=temperature_2m,relative_humidity_2m,pressure_msl,weather_code&hourly=pressure_msl,temperature_2m,relative_humidity_2m,weather_code&timezone=auto&forecast_days=2",
 			Cfg.Lat,Cfg.Lon);
-			JObject j=JObject.Parse(await Http.GetStringAsync(url));
+			string wk=WxCache.Key(Cfg.Lat,Cfg.Lon);// live-погода и hourly-прогноз — общие на округлённые координаты
+			JObject j;
+			if(!WxCache.Try("live:"+wk,WxCache.LiveTtlMin,out j)){
+				j=JObject.Parse(await Http.GetStringAsync(url));
+				WxCache.Put("live:"+wk,j);
+			}
 			Weather.PressMm=(float)((double)j["current"]["pressure_msl"]*0.750062);
 			Weather.TempC=(float)(double)j["current"]["temperature_2m"];
 			Weather.Hum=(float)(double)j["current"]["relative_humidity_2m"];
@@ -78,9 +83,13 @@ partial class Profile
 				DateTime start=now.AddHours(-24);// Kp — 3-часовой, сутки даёт 8 значений, хватает
 				url=string.Format("https://kp.gfz.de/app/json/?start={0:yyyy-MM-ddTHH:mm:ssZ}&end={1:yyyy-MM-ddTHH:mm:ssZ}&index=Kp",
 				start,now);
-				string jsonString=await Http.GetStringAsync(url);
-				if(string.IsNullOrWhiteSpace(jsonString)) return;
-				JToken token=JToken.Parse(jsonString);
+				JToken token;// Kp не зависит от координат — общий кэш на сервер
+				if(!WxCache.Try("kp:live",WxCache.KpTtlMin,out token)){
+					string jsonString=await Http.GetStringAsync(url);
+					if(string.IsNullOrWhiteSpace(jsonString)) return;
+					token=JToken.Parse(jsonString);
+					WxCache.Put("kp:live",token);
+				}
 				JToken kpArr=token["Kp"];
 				JToken dtArr=token["datetime"];
 				if(kpArr is JArray karr&&dtArr is JArray darr){
@@ -100,14 +109,18 @@ partial class Profile
 				}
 			} catch(Exception ex){ Log("Kp: "+ex.Message); }
 			try{// NOAA SWPC: 3-дневный прогноз Kp (3-ч бины, UTC; observed = estimated/predicted)
+				List<KeyValuePair<DateTime,double>> l;
+				if(!WxCache.Try("kpfc",WxCache.KpFcTtlMin,out l)){
 				JArray kf=JArray.Parse(await Http.GetStringAsync("https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"));
-				List<KeyValuePair<DateTime,double>> l=new List<KeyValuePair<DateTime,double>>();
+				l=new List<KeyValuePair<DateTime,double>>();
 				foreach(JToken x in kf){
 					if((string)x["observed"]=="observed") continue;
 					DateTime tt; double kv;
 					if(DateTime.TryParse((string)x["time_tag"],CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal|DateTimeStyles.AdjustToUniversal,out tt)
 						&&double.TryParse((string)x["kp"],NumberStyles.Number,CultureInfo.InvariantCulture,out kv))
 						l.Add(new KeyValuePair<DateTime,double>(tt,kv));
+				}
+				if(l.Count>0) WxCache.Put("kpfc",l);
 				}
 				if(l.Count>0) KpForecast=l;
 			} catch(Exception ex){ Log("KpFc: "+ex.Message); }
@@ -162,6 +175,9 @@ partial class Profile
 	async Task<WxDay> FetchWxDayAsync(DateTime date){
 		EnsureBrowserHeaders();
 		int daysBack=(int)(DateTime.Today-date.Date).TotalDays;
+		string dk="day:"+WxCache.Key(Cfg.Lat,Cfg.Lon)+":"+date.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);// архив неизменен: старые сутки — бессрочно, свежие (ERA5 догоняет) — 6 ч
+		WxDay cachedDay;
+		if(WxCache.Try(dk,daysBack<=5?WxCache.RecentDayTtlMin:-1,out cachedDay)) return cachedDay;
 		string url;
     		if(daysBack<=5)// свежий период: forecast API (архив ERA5 отстаёт на ~5 суток)
 			url=string.Format(CultureInfo.InvariantCulture,"https://api.open-meteo.com/v1/forecast?latitude={0}&longitude={1}&hourly=pressure_msl,temperature_2m,relative_humidity_2m,weather_code&timezone=auto&past_days={2}&forecast_days=1",Cfg.Lat,Cfg.Lon,Math.Min(91,Math.Max(0,daysBack+1)));
@@ -189,6 +205,7 @@ partial class Profile
 				}
 			}
 		}catch{}
+		if(d!=null) WxCache.Put(dk,d);
 		return d;
 	}
 	// дозаполняет пустые поля погоды/Kp записи по архиву за m.T; true = что-то заполнено

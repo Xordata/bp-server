@@ -173,12 +173,13 @@ server {
 - [x] `AuthCfg.SecureCookies` (false — только для локальной разработки по http); `bpxor.config.json` рядом с exe
 - [x] Смоук на fake-IMAP (self-signed TLS, 993): домен-фильтр 401, бэкофф 429, логин/сессия/me 200, state 401/200, POST без X-CSRF 403 / с ним ok, cap (MaxUsers=2: третий 403), logout→401, изоляция данных пользователей. Selftest 16/16 (новая проверка: сессии/rate-limit/cap)
 
-### Фаза 3 — паритет функций
-- [ ] Все эндпоинты в per-user контексте (measurement/journal/medtake/config/nn/weather/export/import)
-- [ ] Импорт `ver:1` из десктопа + экран импорта
-- [ ] Погода: per-user координаты, общий серверный кэш
-- [ ] Фоновые job'ы per-user с очередью (max 2 параллельно)
-- [ ] Перенос самотеста (`--selftest`) на веб-сборку + тесты импорта
+### Фаза 3 — паритет функций — **ГОТОВО 2026-11-05**
+- [x] Все эндпоинты в per-user контексте (measurement/journal/medtake/config/nn/weather/export/import) — сделано ещё фазой 2 (`P(ctx)`), проверено: ни один обработчик не трогает чужой профиль
+- [x] Импорт `ver:1` из десктопа + экран импорта (`ImportAll` с preimport-архивом + confirm в UI вкладки «Настройки»)
+- [x] Погода: per-user координаты + общий серверный кэш `WxCache` (live/hourly — по округлённым координатам ~1 км, TTL 10 мин; GFZ Kp — глобально, 60 мин; NOAA прогноз — 3 ч; архивные сутки — 6 ч для свежих, бессрочно для старых, LRU 4096). Смоук: refresh 1.1 с (сеть) → 0.2 с (кэш)
+- [x] Фоновые job'ы per-user + глобальная очередь `JobGate` (FIFO, `AuthCfg.MaxConcurrentJobs`, по умолчанию **1** — зафиксированное решение для 2 vCPU; `/api/job` отдаёт `queued`, ответ `/api/*/train*` — `queued:true`)
+- [x] Перенос самотеста (`--selftest`) на веб-сборку + тесты импорта — 18/18 (новые: WxCache, JobGate)
+- [x] Попутно найден и исправлен **дедлок**: `/api/weather/refresh` вызывал `PollWeatherAsync().GetAwaiter().GetResult()` под `lock(Sync)` в `Post()`, а `MaybePopup` внутри `PollWeatherAsync` берёт тот же `Sync` — обработчик переведён на `async/await` вне lock
 
 ### Фаза 4 — будильники
 - [ ] Планировщик `IHostedService` (режимы daily/days/everyN, tz юзера, догон 30 мин, LastFired persist)

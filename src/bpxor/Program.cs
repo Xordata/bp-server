@@ -38,6 +38,7 @@ static class Program{
 		string cfgPath=Path.Combine(AppContext.BaseDirectory,"bpxor.config.json");
 		if(File.Exists(cfgPath)){ try{ JsonConvert.PopulateObject(File.ReadAllText(cfgPath),ACfg); }catch(Exception ex){ Console.WriteLine("config: "+ex.Message); } }
 		UserStore.Root=dataRoot; UserStore.Cfg=ACfg; Sessions.Init(dataRoot);
+		JobGate.Max=Math.Max(1,ACfg.MaxConcurrentJobs);
 
 		var builder=Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder(new string[0]);
 		builder.Logging.ClearProviders();

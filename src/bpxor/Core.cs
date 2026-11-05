@@ -52,6 +52,7 @@ partial class Profile
 		public string Result;
 		public string Error;
 		public bool Running;
+		public bool Queued;// ждёт освобождения глобального JobGate.Max слота
 	}
 	Job _job;
 	readonly object JobLock=new object();
@@ -70,10 +71,11 @@ partial class Profile
 	public string JobResult{ get{ Job j=_job; return j!=null?j.Result:null; } set{ Job j=_job; if(j!=null) j.Result=value; } }
 	public string JobError{ set{ Job j=_job; if(j!=null) j.Error=value; } }
 	public void FinishJob(){ Job j=_job; if(j!=null) j.Running=false; }
+	public bool JobQueued{ get{ Job j=_job; return j!=null&&j.Queued; } set{ Job j=_job; if(j!=null) j.Queued=value; } }
 	public JObject JobJson(){
 		Job j=_job;
 		if(j==null) return new JObject{["running"]=false};
-		return new JObject{["running"]=j.Running,["name"]=j.Name,["started"]=j.Started.ToString("yyyy-MM-dd HH:mm:ss"),["done"]=j.Done,["total"]=j.Total,["result"]=j.Result??"",["error"]=j.Error??""};
+		return new JObject{["running"]=j.Running,["queued"]=j.Queued,["name"]=j.Name,["started"]=j.Started.ToString("yyyy-MM-dd HH:mm:ss"),["done"]=j.Done,["total"]=j.Total,["result"]=j.Result??"",["error"]=j.Error??""};
 	}
 	double Clamp(double v,double lo,double hi){ return v<lo?lo:(v>hi?hi:v); }
 	public readonly string[] FeatBase={

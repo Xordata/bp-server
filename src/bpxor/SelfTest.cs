@@ -273,6 +273,34 @@ partial class Profile
 			try{ ImportAll(JObject.Parse("{\"app\":\"other\",\"ver\":1}")); throw new Exception("чужой файл должен отвергаться"); }
 			catch(Exception ex){ if(ex.Message=="чужой файл должен отвергаться") throw; }
 		});
+		check("Фаза 3: WxCache — общий кэш по округлённым координатам",()=>{
+			WxCache.Clear();
+			if(WxCache.Key(55.751,37.619)!=WxCache.Key(55.752,37.621)) throw new Exception("близкие координаты должны давать один ключ");
+			if(WxCache.Key(55.75,37.619)==WxCache.Key(56.75,37.619)) throw new Exception("разные широты дали один ключ");
+			string v;
+			if(WxCache.Try("live:тест",10,out v)) throw new Exception("hit на пустом кэше");
+			WxCache.Put("live:тест","данные");
+			if(!WxCache.Try("live:тест",10,out v)||v!="данные") throw new Exception("miss после Put");
+			if(!WxCache.Try("live:тест",-1,out v)) throw new Exception("бессрочный ttl должен попадать");
+			WxCache.Clear();
+		});
+		check("Фаза 3: JobGate — глобальная очередь, max 1",()=>{
+			JobGate.Reset(); JobGate.Max=1;
+			var aStarted=new ManualResetEventSlim(false);
+			var aRelease=new ManualResetEventSlim(false);
+			var order=new List<string>(); object olk=new object();
+			JobGate.Run(()=>{ lock(olk) order.Add("A"); aStarted.Set(); aRelease.Wait(); });
+			if(!aStarted.Wait(2000)) throw new Exception("A не запустилась сразу");
+			bool bq=false;
+			JobGate.Run(()=>{ lock(olk) order.Add("B"); },()=>bq=true);
+			Thread.Sleep(150);
+			if(!bq||JobGate.Pending!=1) throw new Exception("B не встала в очередь (queued="+bq+", pending="+JobGate.Pending+")");
+			aRelease.Set();
+			for(int i=0;i<50&&JobGate.Pending>0;i++) Thread.Sleep(50);
+			Thread.Sleep(200);
+			lock(olk){ if(order.Count!=2||order[0]!="A"||order[1]!="B") throw new Exception("порядок выполнения: "+string.Join(",",order)); }
+			if(JobGate.Running!=0) throw new Exception("слоты не освободились: "+JobGate.Running);
+		});
 		check("Фаза 2: сессии, rate-limit, cap пользователей",()=>{
 			string root=Path.Combine(ExeDir,"auth-test");
 			if(Directory.Exists(root)) Directory.Delete(root,true);
