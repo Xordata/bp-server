@@ -191,12 +191,13 @@ server {
 - [x] Selftest 26/26 (7 новых проверок: расписание/tz/догон/dismiss/persist/PushStore/VAPID-JWT) + смоук на fake-IMAP+fake-SMTP+fake-push (22 проверки: ring→push JWT, email-фолбэк без подписок, dismiss без CSRF, отсутствие дублей)
 - [x] Попутно: `Task<bool>.Wait(timeout)` возвращает «успел ли», а не результат — `pushed` всегда true и email-фолбэк молчал; поймано смоуком, теперь `t.Wait(25s)` + `t.Result`
 
-### Фаза 5 — трафик
-- [ ] `/api/delta?since=seq` + revision'ы конфига/НН/погоды
-- [ ] ETag на всех GET, 304
-- [ ] nginx brotli + HTTP/2
-- [ ] Пагинация истории
-- [ ] SSE `/api/events` вместо поллинга state
+### Фаза 5 — трафик — **ГОТОВО 2026-11-05 (код, dcb59f9)**
+- [x] `/api/delta?since=seq` + revision'ы — курсор (gen, seq=смещение в data.bin), v3 заголовок журнала с поколением (компакция -> reset клиента), rev'ы cfg/nn/medpk по mtime, погода по Updated; чистый курсор ≈ 108 байт
+- [x] ETag на всех GET, 304 — /api/state (sync-блок как ETag), /q, /, манифест (mtime+len)
+- [ ] nginx brotli + HTTP/2 — конфиг в deploy/ есть (brotli+gzip+SSE-блок), проверить на сервере `nginx -T | grep -E 'http2|brotli'`
+- [x] Пагинация истории — /api/measurements?before&limit, state кап 500 + measTotal/wxMissing, в UI «Показать ещё»
+- [x] SSE `/api/events` вместо поллинга state — EventHub (Channel на вкладку), публикация: Post-мутации, конец PollWeatherAsync, FinishJob, dismiss; heartbeat 25 с; клиент: EventSource + фолбэк-поллинг 30 с при CLOSED
+- [x] (сверх списка) порт сервера убран из настроек UI и игнорируется в /api/config (запрос владельца 2026-11-05)
 
 ### Фаза 6 — титульная страница
 - [ ] Рефакторинг index.html xor.world на data-driven список кнопок
