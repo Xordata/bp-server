@@ -34,8 +34,9 @@ touch /var/log/nginx/bp.access.log && chown www-data:adm /var/log/nginx/bp.acces
 cat > /etc/fail2ban/filter.d/bpxor-login.conf <<'EOF'
 # Ловим ТОЛЬКО неверные логины (POST /api/login -> 401); 401 от /api/* при
 # истёкшей сессии легального пользователя банить НЕ должны.
+# fail2ban 1.x вырезает дату из строки до матчинга — внутри [] звёздочка.
 [Definition]
-failregex = ^<HOST> - \S+ \[[^\]]+\] "POST /api/login[^"]*" 401 
+failregex = ^<HOST> - \S+ \[[^\]]*\] "POST /api/login[^"]*" 401
 ignoreregex =
 EOF
 
