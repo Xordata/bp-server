@@ -67,6 +67,9 @@ static class Program{
 		if((path=="/login"||path=="/login.html")&&req.Method=="GET"){ await ServeLoginPage(ctx); return; }
 		if(path=="/api/login"&&req.Method=="POST"){ await DoLogin(ctx); return; }
 		if(path=="/sw.js"&&req.Method=="GET"){ await ServeStatic(ctx,"sw.js","text/javascript; charset=utf-8"); return; }
+		// favicon и иконки — публичны (нужны на странице входа); отдаются как есть, PNG браузер определит по содержимому
+		if(req.Method=="GET"&&path=="/favicon.ico"){ await ServeStaticBin(ctx,"icons/icon-192.png","image/png"); return; }
+		if(req.Method=="GET"&&path.StartsWith("/icons/")&&System.Text.RegularExpressions.Regex.IsMatch(path,"^/icons/[a-z0-9-]+[.]png$")){ await ServeStaticBin(ctx,path.Substring(1),"image/png"); return; }
 		if(path=="/logout"){ string t0=GetCookie(req,CookieSid); if(t0!=null) Sessions.Destroy(t0); DelCookie(ctx,CookieSid); DelCookie(ctx,CookieCsrf); ctx.Response.Redirect("/login"); return; }
 		// ---- сессия ----
 		var s=Sessions.Resolve(GetCookie(req,CookieSid));
@@ -107,6 +110,13 @@ static class Program{
 		await R(200,"{\"ok\":true}");
 	}
 
+	static async Task ServeStaticBin(HttpContext ctx,string fname,string ctype){
+		string f=Path.Combine(AppContext.BaseDirectory,fname);
+		if(!File.Exists(f)){ ctx.Response.StatusCode=404; return; }
+		ctx.Response.ContentType=ctype;
+		ctx.Response.Headers["Cache-Control"]="public, max-age=86400";
+		await ctx.Response.Body.WriteAsync(await File.ReadAllBytesAsync(f));
+	}
 	static async Task ServeStatic(HttpContext ctx,string fname,string ctype){
 		string f=Path.Combine(AppContext.BaseDirectory,fname);
 		if(!File.Exists(f)){ ctx.Response.StatusCode=404; return; }
