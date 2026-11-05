@@ -149,10 +149,11 @@ server {
 - [x] `apt install libnginx-mod-http-brotli-filter libnginx-mod-http-brotli-static` — установлено 2026-11-05, nginx перезагружен
 - [x] DNS A `bp.xor.world` → <VPS-IP> — распространение подтверждено (1.1.1.1, 8.8.8.8)
 - [x] Сертификат выпущен 2026-11-05: `certbot --nginx -d bp.xor.world --redirect` — https работает, 301 с http, продление авто (expires 2027-02-03); vhost bp.xor.world в sites-enabled, brotli/gzip/limit_req на месте
-- [ ] nginx vhost — **сделано** (см. выше); fail2ban jail на 401 — ещё нет (deploy/fail2ban-bpxor.conf)
+- [x] nginx vhost — **сделано** (см. выше); fail2ban jail bp-login — **сделано 2026-11-05** (regex только POST /api/login 401; fail2ban 1.x вырезает дату до матчинга — в regex пустые []); проверен fail2ban-regex 1 matched
 - [x] Бот-аккаунт `bpxor@example.org` для email-фолбэка — создан 2026-11-05 (подтверждён списком ящиков maddy); пароль в `U:\AISess\secrets\bpxor.config.json` (вне репо), при деплое → `bpxor.config.json` рядом с бинарём, chmod 600. С dev-машины AUTH не проверить (файрвол: TCP принимает, данных нет) — проверить с сервера при деплое
-- [ ] cron: бэкап /opt/bpdata 03:30
+- [ ] cron: бэкап /opt/bpdata 03:30 — скрипт готов (deploy/backup-bpdata.sh), проверить `crontab -l`
 - [x] .NET 8 runtime не нужен — self-contained linux-x64; glibc 2.36 ✓
+- [x] **ПЕРВЫЙ ДЕПЛОЙ 2026-11-05**: bpxor на сервере (systemd bpxor.service, /usr/local/bin/bpxor + /opt/bpdata), https://bp.xor.world работает (login 200, гейт 401 на /api/*), пользователь admin@example.org импортировал десктоп-экспорт без потерь (189 измерений / 4 эмоции / 2 шума / 2 сна / 3 приёма — сверено с десктопом 1:1)
 
 ### Фаза 1 — каркас (порт) — **ГОТОВО 2026-11-05**
 - [x] `dotnet new web` (.NET 8), перенос BpMonitor.cs по модулям: Models / Core / Storage / Neural / Weather / MedPk(в Neural) / Alarms / Export / State / HttpApi / SelfTest (U:\AISess\bp.xor.world\src\bpxor)
