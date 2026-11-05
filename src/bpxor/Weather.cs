@@ -15,10 +15,10 @@ using Newtonsoft.Json.Linq;
 namespace BpMonitor
 {
 // Погода: open-meteo, GFZ Kp, NOAA прогноз, архив, popup (порт BpMonitor.cs)
-static partial class App
+partial class Profile
 {
 	// ----------------------------- погода -----------------------------
-	static string WmoText(int c){
+	string WmoText(int c){
 		switch(c){
 			case 0:return"ясно";
 			case 1:return"малооблачно";
@@ -34,7 +34,7 @@ static partial class App
 		if(c==85||c==86) return"снежные шквалы";
 		return c>=95?"гроза":"неизвестно";
 	}
-	public static async Task PollWeatherAsync(){
+	public async Task PollWeatherAsync(){
 		if(_weatherBusy) return;
 		_weatherBusy=true;
 		try{
@@ -136,10 +136,10 @@ static partial class App
 		} catch(Exception ex){ Log("PollWeather: "+ex.Message); } finally{ _weatherBusy=false; }
 	}
 	// fire-and-forget для таймера/Snapshot: все исключения уже логируются внутри PollWeatherAsync
-	public static void PollWeather(){ _=PollWeatherAsync(); }
+	public void PollWeather(){ _=PollWeatherAsync(); }
 
 	// ----------------------------- историческая погода (архив) -----------------------------
-	static void EnsureBrowserHeaders(){
+	void EnsureBrowserHeaders(){
 		if(!Http.DefaultRequestHeaders.Contains("User-Agent"))
 			Http.DefaultRequestHeaders.Add("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
 		if(!Http.DefaultRequestHeaders.Contains("Accept")) Http.DefaultRequestHeaders.Add("Accept","application/json");
@@ -150,16 +150,16 @@ static partial class App
 		public double?[] Pres,Temp,Hum,Code;
 		public List<KeyValuePair<DateTime,double>> Kp=new List<KeyValuePair<DateTime,double>>();// старт 3-ч.bin (UTC), значение
 	}
-	static double?[] PickHourly(JObject h,string key,int n){
+	double?[] PickHourly(JObject h,string key,int n){
 		double?[] r=new double?[n];
 		JArray a=h[key] as JArray;
 		if(a!=null) for(int i=0;i<n&&i<a.Count;i++) r[i]=(double?)a[i];
 		return r;
 	}
-	static WxDay FetchWxDay(DateTime date){
+	WxDay FetchWxDay(DateTime date){
 		try{ return FetchWxDayAsync(date).GetAwaiter().GetResult(); } catch{ return null; }
 	}
-	static async Task<WxDay> FetchWxDayAsync(DateTime date){
+	async Task<WxDay> FetchWxDayAsync(DateTime date){
 		EnsureBrowserHeaders();
 		int daysBack=(int)(DateTime.Today-date.Date).TotalDays;
 		string url;
@@ -192,7 +192,7 @@ static partial class App
 		return d;
 	}
 	// дозаполняет пустые поля погоды/Kp записи по архиву за m.T; true = что-то заполнено
-	public static bool FillWx(Measurement m,WxDay d=null){
+	public bool FillWx(Measurement m,WxDay d=null){
 		if(m.PressMm!=null&&m.TempC!=null&&m.Hum!=null&&m.Kp!=null) return false;
 		if(d==null){ d=FetchWxDay(m.T.Date); if(d==null) return false; }
 		int idx=-1; double best=double.MaxValue;
@@ -212,7 +212,7 @@ static partial class App
 		return any;
 	}
 	// массовое дозаполнение: все записи, где хоть одно поле пусто
-	public static int BackfillWeather(DateTime? forceUntil=null){
+	public int BackfillWeather(DateTime? forceUntil=null){
 		List<Measurement> targets=D.M.Where(m=>m.PressMm==null||m.TempC==null||m.Hum==null||m.Kp==null
 			||(forceUntil!=null&&m.T<=forceUntil.Value)).OrderBy(m=>m.T).ToList();
 		int n=0,done=0;
@@ -240,14 +240,14 @@ static partial class App
 
 	// ----------------------------- popup (прогноз выше нормы) -----------------------------
 	// прогнозный Kp для момента (локальное время): 3-ч бин SWPC в UTC; null — нет прогноза
-	static int? KpForecastAt(DateTime localT){
+	int? KpForecastAt(DateTime localT){
 		DateTime u=localT.ToUniversalTime();
 		double? v=null;
 		foreach(KeyValuePair<DateTime,double> p in KpForecast) if(p.Key<=u&&u<p.Key.AddHours(3)) v=p.Value;
 		return v!=null?(int?)Math.Round(v.Value*10):null;
 	}
 	// прогноз НН по почасовому прогнозу погоды на ближайшие hours часов (для UI и popup)
-	public static JArray ForecastPredictions(int hours=12){
+	public JArray ForecastPredictions(int hours=12){
 		JArray arr=new JArray();
 		if(Forecast.Count==0) return arr;
 		DateTime now=DateTime.Now;
@@ -275,7 +275,7 @@ static partial class App
 	}
 	// «через ~N часов условия как в дни ростов»: прогон модели по почасовому прогнозу
 	// погоды/Kp и предупреждаем заранее, а не по факту. Общий cooldown с обычным popup.
-	public static void MaybePopupForecast(){
+	public void MaybePopupForecast(){
 		if(Forecast.Count==0) return;
 		lock(Sync){
 		try{
@@ -298,7 +298,7 @@ static partial class App
 		} catch(Exception ex){ Log("PopupForecast: "+ex.Message); }
 		}
 	}
-	public static void MaybePopup(string trigger){
+	public void MaybePopup(string trigger){
 		if(Weather.PressMm==null) return;
 		lock(Sync){
 		try{

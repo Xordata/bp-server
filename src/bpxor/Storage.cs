@@ -15,17 +15,17 @@ using Newtonsoft.Json.Linq;
 namespace BpMonitor
 {
 // Хранилище: config.json + бинарный append-журнал data.bin + nn.bin (порт BpMonitor.cs)
-static partial class App
+partial class Profile
 {
 	// ----------------------------- пути/загрузка -----------------------------
-	public static void InitPaths(string dir=null){// dir != null — работа в песочнице (selftest)
+	public void InitPaths(string dir=null){// dir != null — работа в песочнице (selftest)
 		ExeDir=dir??AppDomain.CurrentDomain.BaseDirectory;
 		CfgPath=Path.Combine(ExeDir,"config.json");
 		DataPath=Path.Combine(ExeDir,"data","data.json");
 		DataBinPath=Path.Combine(ExeDir,"data","data.bin");
 		IndexPath=Path.Combine(AppContext.BaseDirectory,"index.html");// SPA рядом с бинарём, данные — в ExeDir (--data)
 	}
-	public static void Load(){
+	public void Load(){
 		LoadMedPk();// справочник ФК нужен до EnsureNnDim/Train (PK-фичи)
 		LoadValidation();
 		LoadTune();
@@ -64,12 +64,12 @@ static partial class App
 		else if(_logRecords>2*(D.M.Count+D.E.Count+D.N.Count+D.S.Count)+64)
 			Save();// компакция: накопилось слишком много tombstone/обновлений
 	}
-	static void Quarantine(string path){
+	void Quarantine(string path){
 		try{ File.Move(path,path+".bad-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")); } catch{}
 	}
 	// Суточный бэкап: config.json + data.bin + nn.bin -> backups\yyyyMMdd.zip (не чаще раза в сутки,
 	// храним последние 30 архивов). Вызывается при старте и раз в час из UI-таймера.
-	public static void DailyBackup(){
+	public void DailyBackup(){
 		try{
 			string dir=Path.Combine(ExeDir,"backups");
 			string zip=Path.Combine(dir,DateTime.Now.ToString("yyyyMMdd")+".zip");
@@ -90,7 +90,7 @@ static partial class App
 		} catch(Exception ex){ Log("backup error: "+ex.Message); }
 	}
 	// Kp во всех источниках — десятые доли (33 = 3.3). Старые записи: GFZ писал Kp*100, HA — 0..9
-	static bool MigrateKp(){
+	bool MigrateKp(){
 		bool changed=false;
 		foreach(Measurement m in D.M){
 			if(m.Kp==null) continue;
@@ -101,7 +101,7 @@ static partial class App
 		}
 		return changed;
 	}
-	public static void Save(){// полный снимок: миграция/компакция/выход
+	public void Save(){// полный снимок: миграция/компакция/выход
 		lock(Io){
 			try{
 				File.WriteAllText(CfgPath,JsonConvert.SerializeObject(Cfg,Formatting.Indented));
@@ -126,10 +126,10 @@ static partial class App
 		}
 		SaveNn();
 	}
-	public static void SaveCfg(){
+	public void SaveCfg(){
 		lock(Io){ try{ File.WriteAllText(CfgPath,JsonConvert.SerializeObject(Cfg,Formatting.Indented)); } catch{} }
 	}
-	public static void SaveNn(){// модель маленькая (~1-8 КБ) — переписываем целиком
+	public void SaveNn(){// модель маленькая (~1-8 КБ) — переписываем целиком
 		lock(Io){
 			try{
 				Directory.CreateDirectory(Path.GetDirectoryName(NnPath)??"");
@@ -165,18 +165,18 @@ static partial class App
 	const uint BinMagic=0x4E4D5042;// "BPMN"
 	const byte BinVer=2;
 	public const byte RecStr=1,RecMeas=0x10,RecMeasDel=0x11,RecEmo=0x20,RecEmoDel=0x21,RecNoi=0x30,RecNoiDel=0x31,RecSleep=0x40,RecSleepDel=0x41,RecPopup=0x50,RecMedTake=0x60,RecMedTakeDel=0x61;
-	static Dictionary<string,int> _pool=new Dictionary<string,int>();
-	static int _poolNext;
-	static int _logRecords;
-	static string NnPath{ get{ return Path.Combine(ExeDir,"data","nn.bin"); } }
-	static byte[] RecPayload(Action<BinaryWriter> fill){
+	Dictionary<string,int> _pool=new Dictionary<string,int>();
+	int _poolNext;
+	int _logRecords;
+	string NnPath{ get{ return Path.Combine(ExeDir,"data","nn.bin"); } }
+	byte[] RecPayload(Action<BinaryWriter> fill){
 		using(MemoryStream ms=new MemoryStream()){
 			using(BinaryWriter pw=new BinaryWriter(ms)) fill(pw);
 			return ms.ToArray();
 		}
 	}
-	static void WriteRec(BinaryWriter w,byte type,byte[] payload){ w.Write(type); w.Write(payload.Length); w.Write(payload); }
-	static Func<string,int> PoolWriter(BinaryWriter w){// новая строка -> Str-запись в этот же writer
+	void WriteRec(BinaryWriter w,byte type,byte[] payload){ w.Write(type); w.Write(payload.Length); w.Write(payload); }
+	Func<string,int> PoolWriter(BinaryWriter w){// новая строка -> Str-запись в этот же writer
 		return str=>{
 			str=str??"";
 			int id;
@@ -186,7 +186,7 @@ static partial class App
 			return id;
 		};
 	}
-	static byte[] MeasPayload(Measurement m,Func<string,int> pool){
+	byte[] MeasPayload(Measurement m,Func<string,int> pool){
 		return RecPayload(w=>{
 			Guid g; Guid.TryParse(m.Id,out g);
 			w.Write(g.ToByteArray());// 16
@@ -212,14 +212,14 @@ static partial class App
 			w.Write((ushort)Math.Min(65535,nb.Length)); w.Write(nb,0,Math.Min(65535,nb.Length));
 		});
 	}
-	static byte[] EmoPayload(EmotionEntry e,Func<string,int> pool){
+	byte[] EmoPayload(EmotionEntry e,Func<string,int> pool){
 		return RecPayload(w=>{
 			Guid g; Guid.TryParse(e.Id,out g);
 			w.Write(g.ToByteArray()); w.Write(e.T.Ticks); w.Write((sbyte)e.Val);
 			byte[] nb=Encoding.UTF8.GetBytes(e.Note??""); w.Write((ushort)nb.Length); w.Write(nb);
 		});
 	}
-	static byte[] NoiPayload(NoiseEntry n2,Func<string,int> pool){
+	byte[] NoiPayload(NoiseEntry n2,Func<string,int> pool){
 		return RecPayload(w=>{
 			Guid g; Guid.TryParse(n2.Id,out g);
 			w.Write(g.ToByteArray()); w.Write(n2.T.Ticks);
@@ -227,43 +227,43 @@ static partial class App
 			byte[] nb=Encoding.UTF8.GetBytes(n2.Note??""); w.Write((ushort)nb.Length); w.Write(nb);
 		});
 	}
-	static byte[] SleepPayload(SleepEntry s2,Func<string,int> pool){
+	byte[] SleepPayload(SleepEntry s2,Func<string,int> pool){
 		return RecPayload(w=>{
 			Guid g; Guid.TryParse(s2.Id,out g);
 			w.Write(g.ToByteArray()); w.Write(s2.T.Ticks); w.Write(s2.Hours); w.Write((byte)s2.Quality);
 			byte[] nb=Encoding.UTF8.GetBytes(s2.Note??""); w.Write((ushort)nb.Length); w.Write(nb);
 		});
 	}
-	static byte[] MedTakePayload(MedTakeEntry mt,Func<string,int> pool){
+	byte[] MedTakePayload(MedTakeEntry mt,Func<string,int> pool){
 		return RecPayload(w=>{
 			Guid g; Guid.TryParse(mt.Id,out g);
 			w.Write(g.ToByteArray()); w.Write(mt.T.Ticks);
 			w.Write((ushort)pool(mt.Med??""));
 		});
 	}
-	static BinaryWriter OpenAppend(){
+	BinaryWriter OpenAppend(){
 		Directory.CreateDirectory(Path.GetDirectoryName(DataBinPath)??"");
 		bool fresh=!File.Exists(DataBinPath)||new FileInfo(DataBinPath).Length==0;
 		BinaryWriter w=new BinaryWriter(File.Open(DataBinPath,FileMode.Append));
 		if(fresh){ w.Write(BinMagic); w.Write(BinVer); }// журнал создан дописыванием — заголовок на месте
 		return w;
 	}
-	static void AppendRec(byte type,byte[] payload){
+	void AppendRec(byte type,byte[] payload){
 		lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,type,payload); } catch{} }
 	}
-	public static void AppendMeasurement(Measurement m){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMeas,MeasPayload(m,PoolWriter(w))); } catch{} } }
-	public static void AppendEmotion(EmotionEntry e){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecEmo,EmoPayload(e,PoolWriter(w))); } catch{} } }
-	public static void AppendNoise(NoiseEntry n2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecNoi,NoiPayload(n2,PoolWriter(w))); } catch{} } }
-	public static void AppendSleep(SleepEntry s2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecSleep,SleepPayload(s2,PoolWriter(w))); } catch{} } }
-	public static void AppendMedTake(MedTakeEntry mt){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMedTake,MedTakePayload(mt,PoolWriter(w))); } catch{} } }
-	public static void AppendGuidRec(byte type,string id){ Guid g; if(Guid.TryParse(id,out g)) AppendRec(type,RecPayload(w=>w.Write(g.ToByteArray()))); }
-	static void AppendPopup(){ if(D.LastPopup!=null) AppendRec(RecPopup,RecPayload(w=>w.Write(D.LastPopup.Value.Ticks))); }
-	static bool SameId(string id,Guid g){ Guid g2; return Guid.TryParse(id,out g2)&&g2==g; }
-	static string GetPool(Dictionary<int,string> pool,int id){ string s3; return pool.TryGetValue(id,out s3)?s3:""; }
-	static bool IsBpmn(string path){
+	public void AppendMeasurement(Measurement m){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMeas,MeasPayload(m,PoolWriter(w))); } catch{} } }
+	public void AppendEmotion(EmotionEntry e){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecEmo,EmoPayload(e,PoolWriter(w))); } catch{} } }
+	public void AppendNoise(NoiseEntry n2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecNoi,NoiPayload(n2,PoolWriter(w))); } catch{} } }
+	public void AppendSleep(SleepEntry s2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecSleep,SleepPayload(s2,PoolWriter(w))); } catch{} } }
+	public void AppendMedTake(MedTakeEntry mt){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMedTake,MedTakePayload(mt,PoolWriter(w))); } catch{} } }
+	public void AppendGuidRec(byte type,string id){ Guid g; if(Guid.TryParse(id,out g)) AppendRec(type,RecPayload(w=>w.Write(g.ToByteArray()))); }
+	void AppendPopup(){ if(D.LastPopup!=null) AppendRec(RecPopup,RecPayload(w=>w.Write(D.LastPopup.Value.Ticks))); }
+	bool SameId(string id,Guid g){ Guid g2; return Guid.TryParse(id,out g2)&&g2==g; }
+	string GetPool(Dictionary<int,string> pool,int id){ string s3; return pool.TryGetValue(id,out s3)?s3:""; }
+	bool IsBpmn(string path){
 		try{ using(BinaryReader r=new BinaryReader(File.OpenRead(path))) return r.ReadUInt32()==BinMagic; } catch{ return false; }
 	}
-	static void LoadBin(){
+	void LoadBin(){
 		_pool.Clear(); _poolNext=0; _logRecords=0;
 		Dictionary<int,string> pool=new Dictionary<int,string>();
 		byte[] all=File.ReadAllBytes(DataBinPath);
@@ -341,7 +341,7 @@ static partial class App
 		}
 		foreach(KeyValuePair<int,string> kv in pool) _pool[kv.Value]=kv.Key;
 	}
-	static bool LoadNn(){
+	bool LoadNn(){
 		if(!File.Exists(NnPath)) return false;
 		try{
 			using(BinaryReader r=new BinaryReader(File.OpenRead(NnPath))){

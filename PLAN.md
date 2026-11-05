@@ -164,12 +164,14 @@ server {
 - [x] `dotnet publish -r linux-x64 --self-contained` → U:\AISess\bp.xor.world\publish\linux-x64 (97 МБ)
 - [ ] CI-подобный скрипт: scp + systemctl restart (сделаем при первом деплое)
 
-### Фаза 2 — авторизация и мультипользовательскость
-- [ ] IMAP LOGIN probe (класс `MaddyAuth`), нормализация логина, ограничение домена `@xor.world`
-- [ ] Серверные сессии + cookie, logout, CSRF-токен
-- [ ] Per-user каталоги + ленивая загрузка + per-user lock
-- [ ] Само-регистрация при первом входе + cap 50 (счётчик каталогов под lock'ом)
-- [ ] Rate-limit брутфорса в приложении (бэкофф)
+### Фаза 2 — авторизация и мультипользовательскость — **ГОТОВО 2026-11-05**
+- [x] IMAP LOGIN probe (класс `MaddyAuth`, TLS 993, таймаут 20 с под медленный argon2), нормализация логина (trim+lower), ограничение домена `@xor.world`
+- [x] Серверные сессии (`sessions.json`, sweep просроченных при старте) + cookie `bpxsid` HttpOnly, logout, CSRF `bpxcsrf` (double-submit: cookie==заголовок `X-CSRF`, SPA инжектит в обёртке fetch)
+- [x] Per-user каталоги `users/<uid>/` + ленивая загрузка (`UserStore`, LRU-кэш 20 профилей) + per-user lock (`Profile.Sync`); `AuthGate` кладёт профиль в `ctx.Items`, все эндпоинты работают через `P(ctx)`
+- [x] Само-регистрация при первом входе + cap 50 (счётчик каталогов под lock'ом; существующему пользователю cap не мешает)
+- [x] Rate-limit брутфорса в приложении: ключ `ip|login`, экспоненциальный бэкофф `min(60, FailDelaySec·2^fails)`
+- [x] `AuthCfg.SecureCookies` (false — только для локальной разработки по http); `bpxor.config.json` рядом с exe
+- [x] Смоук на fake-IMAP (self-signed TLS, 993): домен-фильтр 401, бэкофф 429, логин/сессия/me 200, state 401/200, POST без X-CSRF 403 / с ним ok, cap (MaxUsers=2: третий 403), logout→401, изоляция данных пользователей. Selftest 16/16 (новая проверка: сессии/rate-limit/cap)
 
 ### Фаза 3 — паритет функций
 - [ ] Все эндпоинты в per-user контексте (measurement/journal/medtake/config/nn/weather/export/import)

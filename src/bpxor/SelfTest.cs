@@ -15,14 +15,14 @@ using Newtonsoft.Json.Linq;
 namespace BpMonitor
 {
 // Самотест --selftest (перенесён из десктопа без изменений логики) (порт BpMonitor.cs)
-static partial class App
+partial class Profile
 {
 	// ----------------------------- самотестирование: BpMonitor.exe --selftest -----------------------------
 	// Запускается Program.Main ДО Load(): пути переназначены во временный каталог, реальные
 	// config.json/data.bin не затрагиваются. Покрывает: FireToday, JT, окна join/нейтрали FeatsFor,
 	// PK-фичи, round-trip бинарного журнала (append/правка/tombstone/оборванный хвост/компакция).
 	// Возвращает число провалов (0 = OK).
-	public static int SelfTest(){
+	public int SelfTest(){
 		int failed=0;
 		Action<string,Action> check=(name,f)=>{
 			try{ f(); Console.WriteLine("PASS  "+name); }
@@ -66,9 +66,16 @@ static partial class App
 			DateTime t0=new DateTime(2026,8,22,12,0,0);// суббота
 			Measurement m=new Measurement{Id=Guid.NewGuid().ToString("N"),T=t0,Sys=120,Dia=80,Pulse=70};
 			double[] x=FeatsFor(m);
-			if(x.Length!=13) throw new Exception("InDim без лекарств = 13, получили "+x.Length);
+			if(x.Length!=15) throw new Exception("InDim без лекарств = 15, получили "+x.Length);
 			if(Math.Abs(x[8])>1e-9||Math.Abs(x[9])>1e-9||Math.Abs(x[10]-0.75)>1e-6) throw new Exception("нейтрали: эмоция 0, шум 0, сон 7.5ч");
 			if(Math.Abs(x[11])>1e-9) throw new Exception("нейтраль качества сна = 5 -> 0, x[11]="+x[11]);
+			if(Math.Abs(x[13])>1e-9||Math.Abs(x[14])>1e-9) throw new Exception("без dob/пола возраст и пол должны быть нейтральны 0");
+			Cfg.Dob="1980-06-15"; Cfg.Sex="m";
+			x=FeatsFor(m);
+			double ageExp=Clamp(((t0-new DateTime(1980,6,15)).TotalDays/365.25-50.0)/40.0,-1.0,1.0);
+			if(Math.Abs(x[13]-ageExp)>1e-9) throw new Exception("возраст на момент измерения: x[13]="+x[13]+" ждём "+ageExp);
+			if(Math.Abs(x[14]-0.5)>1e-9) throw new Exception("пол m -> 0.5, x[14]="+x[14]);
+			Cfg.Dob=""; Cfg.Sex="";
 			if(Math.Abs(x[0]-Math.Sin(2*Math.PI*12/24))>1e-9) throw new Exception("час sin (12:00)");
 			double dow=((int)t0.DayOfWeek+6)%7;
 			if(Math.Abs(x[2]-Math.Sin(2*Math.PI*dow/7))>1e-9) throw new Exception("день sin");
@@ -100,14 +107,14 @@ static partial class App
 			Measurement m=new Measurement{Id=Guid.NewGuid().ToString("N"),T=t0,Sys=120,Dia=80,Pulse=70,Meds=new List<string>{"тестмед"}};
 			D.M.Add(m);
 			double[] x=FeatsFor(m);
-			if(x.Length!=15) throw new Exception("InDim с 1 лекарством = 15");
-			if(Math.Abs(x[13]-1.0/3)>1e-6) throw new Exception("приём в момент t: conc=1 -> 1/3, x[13]="+x[13]);
-			if(Math.Abs(x[14]-1.0)>1e-6) throw new Exception("в окне действия -> 1, x[14]="+x[14]);
+			if(x.Length!=17) throw new Exception("InDim с 1 лекарством = 17");
+			if(Math.Abs(x[15]-1.0/3)>1e-6) throw new Exception("приём в момент t: conc=1 -> 1/3, x[15]="+x[15]);
+			if(Math.Abs(x[16]-1.0)>1e-6) throw new Exception("в окне действия -> 1, x[16]="+x[16]);
 			double[] x2=FeatsFor(new Measurement{Id=Guid.NewGuid().ToString("N"),T=t0.AddHours(8),Sys=120,Dia=80});
-			if(Math.Abs(x2[13]-0.5/3)>1e-6) throw new Exception("через T½=8ч: conc=0.5 -> 1/6, x[13]="+x2[13]);
-			if(Math.Abs(x2[14]-(1.0-8.0/12))>1e-6) throw new Exception("окно dur=12ч: win=1-8/12, x[14]="+x2[14]);
+			if(Math.Abs(x2[15]-0.5/3)>1e-6) throw new Exception("через T½=8ч: conc=0.5 -> 1/6, x[15]="+x2[15]);
+			if(Math.Abs(x2[16]-(1.0-8.0/12))>1e-6) throw new Exception("окно dur=12ч: win=1-8/12, x[16]="+x2[16]);
 			double[] x3=FeatsFor(new Measurement{Id=Guid.NewGuid().ToString("N"),T=t0.AddHours(13),Sys=120,Dia=80});
-			if(Math.Abs(x3[14])>1e-9) throw new Exception("за окном действия -> 0");
+			if(Math.Abs(x3[16])>1e-9) throw new Exception("за окном действия -> 0");
 		});
 		check("Validate: holdout-раздел + метрики + значимость",()=>{
 			Cfg=new Config(); Cfg.Meds=new List<string>();
@@ -205,8 +212,8 @@ static partial class App
 			if(!ints.TryGetValue("тестмед",out ts)||ts.Count!=2) throw new Exception("union: "+(ts==null?0:ts.Count));
 			// at t0+8h: conc = 0.5^(8/8) + 0.5^0 = 1.5 -> x=min(1.5,3)/3 = 0.5 (тестмед удалён из medpk -> дефолт 8/12)
 			double[] x=FeatsFor(new Measurement{Id=Guid.NewGuid().ToString("N"),T=t0.AddHours(8),Sys=120,Dia=80});
-			if(Math.Abs(x[13]-0.5)>1e-6) throw new Exception("PK-фича по двум приёмам: x[13]="+x[13]);
-			if(Math.Abs(x[14]-1.0)>1e-6) throw new Exception("окно действия свежего приёма -> 1, x[14]="+x[14]);
+			if(Math.Abs(x[15]-0.5)>1e-6) throw new Exception("PK-фича по двум приёмам: x[15]="+x[15]);
+			if(Math.Abs(x[16]-1.0)>1e-6) throw new Exception("окно действия свежего приёма -> 1, x[16]="+x[16]);
 		});
 		check("DailyBackup: архив создаётся один раз в сутки",()=>{
 			string bdir=Path.Combine(ExeDir,"backups");
@@ -265,6 +272,31 @@ static partial class App
 			// чужой файл отвергается
 			try{ ImportAll(JObject.Parse("{\"app\":\"other\",\"ver\":1}")); throw new Exception("чужой файл должен отвергаться"); }
 			catch(Exception ex){ if(ex.Message=="чужой файл должен отвергаться") throw; }
+		});
+		check("Фаза 2: сессии, rate-limit, cap пользователей",()=>{
+			string root=Path.Combine(ExeDir,"auth-test");
+			if(Directory.Exists(root)) Directory.Delete(root,true);
+			Directory.CreateDirectory(Path.Combine(root,"users"));
+			UserStore.Root=root; UserStore.Cfg=new AuthCfg{MaxUsers=2};
+			Sessions.Init(root);
+			if(UserStore.GetOrCreate("a@xor.world")==null) throw new Exception("первый пользователь не создан");
+			if(UserStore.GetOrCreate("b@xor.world")==null) throw new Exception("второй не создан");
+			if(UserStore.GetOrCreate("c@xor.world")!=null) throw new Exception("cap не сработал: третий создан при MaxUsers=2");
+			if(UserStore.GetOrCreate("a@xor.world")==null) throw new Exception("существующий при полном cap должен возвращаться");
+			string tok=Sessions.Create("a@xor.world",1);
+			var ss=Sessions.Resolve(tok);
+			if(ss==null||ss.Uid!="a@xor.world") throw new Exception("сессия не резолвится");
+			if(Sessions.Resolve("net-takogo-tokena")!=null) throw new Exception("неизвестный токен резолвится");
+			if(!File.Exists(Path.Combine(root,"sessions.json"))) throw new Exception("sessions.json не записан");
+			Sessions.Destroy(tok);
+			if(Sessions.Resolve(tok)!=null) throw new Exception("сессия не уничтожена");
+			if(!RateLimit.Allow("k",1)) throw new Exception("чистый ключ заблокирован");
+			RateLimit.Fail("k",1);
+			if(RateLimit.Allow("k",1)) throw new Exception("после Fail не заблокирован");
+			Thread.Sleep(1100);// backoff FailDelaySec=1
+			if(!RateLimit.Allow("k",1)) throw new Exception("backoff не истёк");
+			RateLimit.Ok("k");
+			UserStore.Root=null;// самодостаточность: следующий запуск selftest в другой песочнице
 		});
 		Thread.CurrentThread.CurrentCulture=savedCulture;
 		Console.WriteLine(failed==0?"SELFTEST OK":"SELFTEST FAILED: "+failed);

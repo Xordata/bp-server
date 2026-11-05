@@ -52,6 +52,8 @@ public class Config{
 	public int AlarmAheadMin=5;// напоминание в трее до будильника
 	public bool Autostart=true;
 	public int NormSys=135,NormDia=85;// "норма": прогноз выше -> popup
+	public string Dob="";// дата рождения пользователя yyyy-MM-dd (фича НН "возраст"); пусто = не указан
+	public string Sex="";// пол: "m"|"f" (фича НН "пол"); пусто = не указан
 	public int PopupCooldownMin=120;// пауза между popup
 	public HaCfg Ha=new HaCfg();
 	public NnCfg Nn=new NnCfg();

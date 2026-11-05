@@ -15,13 +15,13 @@ using Newtonsoft.Json.Linq;
 namespace BpMonitor
 {
 // Будильники и напоминания о лекарствах (логика расписания; доставка — Фаза 4) (порт BpMonitor.cs)
-static partial class App
+partial class Profile
 {
 	// ----------------------------- будильник -----------------------------
-	static readonly HashSet<string> Fired=new HashSet<string>();
-	static readonly HashSet<string> Announced=new HashSet<string>();
+	readonly HashSet<string> Fired=new HashSet<string>();
+	readonly HashSet<string> Announced=new HashSet<string>();
 	// должен ли будильник сработать сегодня с учётом расписания
-	static bool FireToday(AlarmDef a,DateTime now){
+	bool FireToday(AlarmDef a,DateTime now){
 		switch(a.Mode){
 			case"days":{
 				int iso=(int)now.DayOfWeek;if(iso==0)iso=7;// вс=7
@@ -37,7 +37,7 @@ static partial class App
 			default:return true;
 		}
 	}
-	public static void CheckAlarms(){
+	public void CheckAlarms(){
 		DateTime now=DateTime.Now;
 		string today=now.ToString("yyyyMMdd");
 		Fired.RemoveWhere(k=>!k.StartsWith(today));// чистим вчерашние ключи
@@ -68,8 +68,8 @@ static partial class App
 	}
 
 	// ----------------------------- напоминания о приёме лекарств -----------------------------
-	static readonly HashSet<string> MedFired=new HashSet<string>();
-	public static void CheckMedReminders(){
+	readonly HashSet<string> MedFired=new HashSet<string>();
+	public void CheckMedReminders(){
 		if(Cfg.MedTimes==null||Cfg.MedTimes.Count==0) return;
 		DateTime now=DateTime.Now;
 		string today=now.ToString("yyyyMMdd");

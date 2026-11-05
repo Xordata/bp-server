@@ -15,10 +15,10 @@ using Newtonsoft.Json.Linq;
 namespace BpMonitor
 {
 // НН: фичи, SGD, GA, holdout-валидация, тюн; ФК-справочник (порт BpMonitor.cs)
-static partial class App
+partial class Profile
 {
 	// ----------------------------- НН: инициализация -----------------------------
-	public static NnModel NewNn(int hidden,int hidden2,int f){
+	public NnModel NewNn(int hidden,int hidden2,int f){
 		Random rnd=new Random(42);
 		double[,] w1=new double[hidden,f];
 		double[] b1=new double[hidden];
@@ -41,20 +41,20 @@ static partial class App
 	// ----------------------------- НН: фичи -----------------------------
 	// контекст для НН: запись засчитывается, если сделана не раньше окна и не позже 10 мин ПОСЛЕ измерения
 	// (обычный workflow: померил — потом сразу записал эмоцию/шум/сон). Нет записи или нулевое значение -> нейтраль
-	static float EmotionAt(DateTime t){
+	float EmotionAt(DateTime t){
 		EmotionEntry e=D.E.Where(x=>x.T<=t.AddMinutes(10)&&t-x.T<=TimeSpan.FromHours(12)).OrderByDescending(x=>x.T).FirstOrDefault();
 		return e?.Val??0f;// шкала -10..+10, 0 = нейтрально
 	}
-	static int NoiseAt(DateTime t){
+	int NoiseAt(DateTime t){
 		int ns=D.N.Where(x=>x.T<=t.AddMinutes(10)&&t-x.T<=TimeSpan.FromHours(3)).Select(x=>x.Type).Distinct().Count();
 		return ns;// нет записей = 0 = тихо, это и есть нейтраль
 	}
-	static float SleepAt(DateTime t){
+	float SleepAt(DateTime t){
 		SleepEntry s=D.S.Where(x=>x.T<=t.AddMinutes(10)&&t-x.T<=TimeSpan.FromHours(36)).OrderByDescending(x=>x.T).FirstOrDefault();
 		return s!=null&&s.Hours>0?s.Hours:7.5f;// нет/ноль -> нейтральные 7.5 ч
 	}
 	// качество сна 0..10 (шкала журнала), нет записи -> нейтральные 5
-	static float SleepQualityAt(DateTime t){
+	float SleepQualityAt(DateTime t){
 		SleepEntry s=D.S.Where(x=>x.T<=t.AddMinutes(10)&&t-x.T<=TimeSpan.FromHours(36)).OrderByDescending(x=>x.T).FirstOrDefault();
 		return s!=null?s.Quality:5f;
 	}
@@ -87,9 +87,9 @@ static partial class App
 	};
 	// Рабочий справочник: грузится из medpk.json рядом с exe (правится без пересборки —
 	// руками или во вкладке «Лекарства»); при отсутствии/битости файла создаётся из эталона.
-	public static Dictionary<string,double[]> MedPkDb=new Dictionary<string,double[]>(MedPkDefault);
-	static string MedPkPath{ get{ return Path.Combine(ExeDir,"medpk.json"); } }
-	public static void LoadMedPk(){
+	public Dictionary<string,double[]> MedPkDb=new Dictionary<string,double[]>(MedPkDefault);
+	string MedPkPath{ get{ return Path.Combine(ExeDir,"medpk.json"); } }
+	public void LoadMedPk(){
 		try{
 			if(File.Exists(MedPkPath)){
 				JObject j=JObject.Parse(File.ReadAllText(MedPkPath,Encoding.UTF8));
@@ -106,14 +106,14 @@ static partial class App
 		MedPkDb=new Dictionary<string,double[]>(MedPkDefault);
 		SaveMedPk();
 	}
-	public static void SaveMedPk(){
+	public void SaveMedPk(){
 		lock(Io){ try{ File.WriteAllText(MedPkPath,JsonConvert.SerializeObject(MedPkDb,Formatting.Indented)); } catch{} }
 	}
-	public static string NormMed(string s){
+	public string NormMed(string s){
 		return new string((s??"").ToLowerInvariant().Replace('ё','е').Where(char.IsLetterOrDigit).ToArray());
 	}
 	// действующая PK: пользовательский override -> справочник -> 8/12 ч
-	public static (double half,double dur) MedKtFor(string name){
+	public (double half,double dur) MedKtFor(string name){
 		string n=NormMed(name);
 		if(Cfg.MedKt!=null) foreach(KeyValuePair<string,MedKt> kv in Cfg.MedKt)
 			if(kv.Value!=null&&NormMed(kv.Key)==n) return (Math.Max(0.25,kv.Value.HalfH),Math.Max(0.5,kv.Value.DurH));
@@ -123,7 +123,7 @@ static partial class App
 	}
 	// времена приёма каждого лекарства: отметки приёма (журнал «Лекарства») + лекарства,
 	// отмеченные на измерениях. Фичи НН строятся на фактических приёмах, а не только на ручном вводе
-	static Dictionary<string,List<DateTime>> MedIntakes(){
+	Dictionary<string,List<DateTime>> MedIntakes(){
 		Dictionary<string,List<DateTime>> d=new Dictionary<string,List<DateTime>>();
 		Action<string,DateTime> add=(s,tt)=>{
 			string k=NormMed(s); if(k=="") return;
@@ -136,19 +136,33 @@ static partial class App
 		return d;
 	}
 	// размерность входа зависит от списка лекарств; при изменении — переучиваем модель с нуля
-	public static void EnsureNnDim(){
+	public void EnsureNnDim(){
 		if(D.Nn?.W1!=null&&D.Nn.W1b!=null&&D.Nn.W1.GetLength(1)==InDim()&&D.Nn.W1.GetLength(0)==Cfg.Nn.Hidden&&D.Nn.W1b.GetLength(0)==Cfg.Nn.Hidden2) return;		D.Nn=NewNn(Cfg.Nn.Hidden,Cfg.Nn.Hidden2,InDim());		Train();
 		SaveNn();
 	}
 
-	public static double[] FeatsFor(Measurement m,Dictionary<string,List<DateTime>> intakes=null){
+	// пользователь: возраст (на момент измерения) и пол — фичи НН x[13]/x[14]; не указано -> нейтраль 0
+	double AgeNorm(DateTime at){
+		DateTime d;
+		if(string.IsNullOrWhiteSpace(Cfg.Dob)||!DateTime.TryParse(Cfg.Dob.Trim(),CultureInfo.InvariantCulture,DateTimeStyles.None,out d)) return 0;
+		if(d.Year<1900||d>at) return 0;
+		double age=(at-d).TotalDays/365.25;
+		return Clamp((age-50.0)/40.0,-1.0,1.0);// 50 лет -> 0, 10 -> -1, 90 -> +1
+	}
+	double SexNorm(){
+		string s=(Cfg.Sex??"").Trim().ToLowerInvariant();
+		if(s=="m"||s=="м"||s=="мужской"||s=="male") return 0.5;
+		if(s=="f"||s=="ж"||s=="женский"||s=="female") return -0.5;
+		return 0;
+	}
+	public double[] FeatsFor(Measurement m,Dictionary<string,List<DateTime>> intakes=null){
 		if(intakes==null) intakes=MedIntakes();
 		double h=m.T.Hour+m.T.Minute/60.0;
 		double dow=((int)m.T.DayOfWeek+6)%7;
 		double[] x=new double[InDim()];
 		x[0]=Math.Sin(2*Math.PI*h/24); x[1]=Math.Cos(2*Math.PI*h/24);
 		x[2]=Math.Sin(2*Math.PI*dow/7); x[3]=Math.Cos(2*Math.PI*dow/7);
-		x[4]=((double)(m.PressMm??1013f)-1013)/40;
+		x[4]=((double)(m.PressMm??760f)-760)/20;// мм рт.ст.: 760 -> 0, ±20 мм -> ±1
 		x[5]=(double)(m.TempC??15f)/15;
 		x[6]=(double)(m.Hum??60f)/100;
 		x[7]=(double)(m.Kp??33)/90;
@@ -157,6 +171,8 @@ static partial class App
 		x[10]=SleepAt(m.T)/10.0;
 		x[11]=(SleepQualityAt(m.T)-5.0)/5.0;// -1..+1 вокруг нейтрали 5
 		x[12]=m.Meds.Count/4.0;
+		x[13]=AgeNorm(m.T);
+		x[14]=SexNorm();
 		for(int k=0;k<Cfg.Meds.Count;k++){// PK-фичи: остаточная активность и нахождение в окне действия
 			(double half,double dur)=MedKtFor(Cfg.Meds[k]);
 			double conc=0,win=0;
@@ -172,7 +188,7 @@ static partial class App
 		}
 		return x;
 	}
-	static double[] Forward(NnModel n,double[] x){
+	double[] Forward(NnModel n,double[] x){
 		int h1=n.W1.GetLength(0),h2=n.W1b.GetLength(0);
 		double[] a1=new double[h1];
 		for(int i=0;i<h1;i++){
@@ -194,7 +210,7 @@ static partial class App
 		}
 		return y;
 	}
-	public static(double sys,double dia) PredictNow(){
+	public (double sys,double dia) PredictNow(){
 		Measurement m=new Measurement{
 			T=DateTime.Now,
 			PressMm=Weather.PressMm,TempC=Weather.TempC,Hum=Weather.Hum,Kp=Weather.Kp
@@ -206,7 +222,7 @@ static partial class App
 	}
 
 	// Обучает НН по всем записям (online: вызывается при каждом вводе)
-	public static void Train(){
+	public void Train(){
 		Dictionary<string,List<DateTime>> intakes=MedIntakes();
 		List<double[]> xs=new List<double[]>();
 		List<double[]> ys=new List<double[]>();
@@ -219,7 +235,7 @@ static partial class App
 	}
 	// SGD по готовой выборке; recordLoss — записать loss последнего эпоха в n.Loss;
 	// seed != 0 — детерминированный перемешивающий генератор (для самотеста валидации)
-	public static void TrainModel(NnModel n,List<double[]> xs,List<double[]> ys,double lr,int epochs,bool recordLoss,int seed=0){
+	public void TrainModel(NnModel n,List<double[]> xs,List<double[]> ys,double lr,int epochs,bool recordLoss,int seed=0){
 		int hidden=n.W1.GetLength(0),f=n.W1.GetLength(1),h2=n.W1b.GetLength(0);
 		Random rnd=seed!=0?new Random(seed):new Random();
 		for(int ep=0;ep<epochs;ep++){
@@ -289,14 +305,14 @@ static partial class App
 	}
 
 	// ----------------------------- НН: генетическое обучение -----------------------------
-	static double[] Pack(NnModel n){
+	double[] Pack(NnModel n){
 		List<double> v=new List<double>();
 		foreach(double d in n.W1) v.Add(d); foreach(double d in n.B1) v.Add(d);
 		foreach(double d in n.W1b) v.Add(d); foreach(double d in n.B1b) v.Add(d);
 		foreach(double d in n.W2) v.Add(d); foreach(double d in n.B2) v.Add(d);
 		return v.ToArray();
 	}
-	static void Unpack(NnModel n,double[] v){
+	void Unpack(NnModel n,double[] v){
 		int q=0;
 		for(int i=0;i<n.W1.GetLength(0);i++) for(int j=0;j<n.W1.GetLength(1);j++) n.W1[i,j]=v[q++];
 		for(int i=0;i<n.B1.Length;i++) n.B1[i]=v[q++];
@@ -305,7 +321,7 @@ static partial class App
 		for(int i=0;i<n.W2.GetLength(0);i++) for(int j=0;j<n.W2.GetLength(1);j++) n.W2[i,j]=v[q++];
 		for(int i=0;i<n.B2.Length;i++) n.B2[i]=v[q++];
 	}
-	static double GaFit(double[] v,NnModel tmp,List<double[]> xs,List<double[]> ys){
+	double GaFit(double[] v,NnModel tmp,List<double[]> xs,List<double[]> ys){
 		Unpack(tmp,v);
 		double sum=0;
 		for(int s=0;s<xs.Count;s++){
@@ -317,7 +333,7 @@ static partial class App
 	}
 	// GA: популяция весов, турнирный отбор, элитизм, гауссова мутация с затуханием sigma
 	// seed != 0 — детерминированный запуск (для тестов/повторяемости)
-	public static double TrainGenetic(int popSize=60,int generations=250,int seed=0){
+	public double TrainGenetic(int popSize=60,int generations=250,int seed=0){
 		NnModel n=D.Nn;
 		Dictionary<string,List<DateTime>> intakes=MedIntakes();
 		List<double[]> xs=new List<double[]>();
@@ -363,7 +379,7 @@ static partial class App
 		}
 		return best;
 	}
-	static int Tournament(double[] fit,Random rnd){
+	int Tournament(double[] fit,Random rnd){
 		int a=rnd.Next(fit.Length),b=rnd.Next(fit.Length),c=rnd.Next(fit.Length);
 		int best=fit[a]<=fit[b]?a:b;
 		return fit[c]<fit[best]?c:best;
@@ -375,22 +391,22 @@ static partial class App
 	// на удержанных: MAE/RMSE в мм рт.ст. Значимость фич — перестановочная: колонка фичи на
 	// holdout перемешивается, насколько вырос MSE — столько фича и двигает прогноз.
 	// Результат живёт в data\validate.json и отдаётся в /api/state (nn.validate).
-	static JObject _lastValidation;
-	public static JObject LastValidation=>_lastValidation;
-	public static void LoadValidation(){
+	JObject _lastValidation;
+	public JObject LastValidation=>_lastValidation;
+	public void LoadValidation(){
 		try{
 			string f=Path.Combine(ExeDir,"data","validate.json");
 			if(File.Exists(f)) _lastValidation=JObject.Parse(File.ReadAllText(f,Encoding.UTF8));
 		} catch(Exception ex){ Log("validate.json: "+ex.Message); }
 	}
-	public static void SetValidation(JObject r){ _lastValidation=r; SaveValidation(); }
-	static void SaveValidation(){
+	public void SetValidation(JObject r){ _lastValidation=r; SaveValidation(); }
+	void SaveValidation(){
 		try{
 			if(_lastValidation!=null) File.WriteAllText(Path.Combine(ExeDir,"data","validate.json"),
 				_lastValidation.ToString(Newtonsoft.Json.Formatting.None),Encoding.UTF8);
 		} catch(Exception ex){ Log("validate.json: "+ex.Message); }
 	}
-	static double Mse(NnModel n,List<double[]> xs,List<double[]> ys){
+	double Mse(NnModel n,List<double[]> xs,List<double[]> ys){
 		double sum=0;
 		for(int s=0;s<xs.Count;s++){
 			double[] y=Forward(n,xs[s]);
@@ -400,7 +416,7 @@ static partial class App
 		return sum/(xs.Count*2.0);
 	}
 	// holdoutN<=0 — авто: max(5, min(40, n/5)); seed — детерминированность перестановок
-	public static JObject Validate(int holdoutN=0,int seed=42){
+	public JObject Validate(int holdoutN=0,int seed=42){
 		List<Measurement> items=D.M.Where(m=>m.Sys>0).OrderBy(m=>m.T).ToList();
 		int n=items.Count;
 		if(n<20) throw new Exception("мало данных для валидации: "+n+" записей (нужно ≥20)");
@@ -457,22 +473,22 @@ static partial class App
 	// Сетка размеров слоёв прогоняется на том же holdout-разделе, что и Validate: каждая
 	// конфигурация обучается с нуля на всех записях, кроме последних N, и сравнивается по
 	// holdout MSE. Лучшая применяется в Cfg.Nn (модель пересоздаётся и переобучивается).
-	static JObject _lastTune;
-	public static JObject LastTune=>_lastTune;
-	public static void LoadTune(){
+	JObject _lastTune;
+	public JObject LastTune=>_lastTune;
+	public void LoadTune(){
 		try{
 			string f=Path.Combine(ExeDir,"data","tune.json");
 			if(File.Exists(f)) _lastTune=JObject.Parse(File.ReadAllText(f,Encoding.UTF8));
 		} catch(Exception ex){ Log("tune.json: "+ex.Message); }
 	}
-	public static void SetTune(JObject r){ _lastTune=r; SaveTune(); }
-	static void SaveTune(){
+	public void SetTune(JObject r){ _lastTune=r; SaveTune(); }
+	void SaveTune(){
 		try{
 			if(_lastTune!=null) File.WriteAllText(Path.Combine(ExeDir,"data","tune.json"),
 				_lastTune.ToString(Newtonsoft.Json.Formatting.None),Encoding.UTF8);
 		} catch(Exception ex){ Log("tune.json: "+ex.Message); }
 	}
-	public static JObject Tune(int holdoutN=0,int seed=42){
+	public JObject Tune(int holdoutN=0,int seed=42){
 		List<Measurement> items=D.M.Where(m=>m.Sys>0).OrderBy(m=>m.T).ToList();
 		int n=items.Count;
 		if(n<20) throw new Exception("мало данных для подбора: "+n+" записей (нужно ≥20)");

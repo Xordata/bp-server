@@ -281,6 +281,14 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
       </div>
     </section>
     <section>
+      <h3>Пользователь</h3>
+      <div class="grid">
+        <label>Дата рождения <input type="date" id="c-dob" style="width:140px"></label>
+        <label>Пол <select id="c-sex" style="width:120px"><option value="">не указан</option><option value="m">мужской</option><option value="f">женский</option></select></label>
+      </div>
+      <p class="mut" style="margin:6px 0 0">Модель использует их как признаки «возраст» (на момент каждого измерения) и «пол»; после изменения модель переобучается автоматически.</p>
+    </section>
+    <section>
       <h3>Норма и оповещение</h3>
       <div class="grid">
         <label>Норма сис ≤ <input type="number" id="c-norms" style="width:60px"></label>
@@ -334,6 +342,19 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
 </main>
 <div id="flash"></div>
 
+<script>
+(function(){
+ function ck(n){var m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));return m?m[1]:null;}
+ var of=window.fetch;
+ window.fetch=function(u,o){o=o||{};var h=o.headers||{};var c=ck('bpxcsrf');if(c){h['X-CSRF']=c;}o.headers=h;
+  return of.call(this,u,o).then(function(r){if(r.status===401&&location.pathname!=='/login')location='/login';return r;});};
+ document.addEventListener('DOMContentLoaded',function(){
+  var a=document.createElement('a');a.href='/logout';a.textContent='Выйти';
+  a.style.cssText='position:fixed;top:6px;right:12px;color:#7f8ea3;font-size:12px;z-index:99999;text-decoration:underline';
+  document.body.appendChild(a);
+ });
+})();
+</script>
 <script>
 "use strict";
 const TABS=[["meas","Измерение"],["hist","История"],["log","Журнал"],["nn","Модель"],["al","Будильники"],["meds","Лекарства"],["cfg","Настройки"]];
@@ -907,6 +928,7 @@ function fillCfg(){
   $("c-port").value=c.Port;$("c-lat").value=c.Lat;$("c-lon").value=c.Lon;$("c-poll").value=c.PollMin;
   $("c-alarm").value=c.AlarmFile||"";$("c-ahead").value=c.AlarmAheadMin;
   $("c-norms").value=c.NormSys;$("c-normd").value=c.NormDia;$("c-cd").value=c.PopupCooldownMin;
+  $("c-dob").value=c.Dob||"";$("c-sex").value=c.Sex||"";
   $("c-auto").checked=!!S.autostart;
   $("c-ha-url").value=(c.Ha&&c.Ha.Url)||"";
   $("c-ha-tok").value=(c.Ha&&c.Ha.Token)||"";
@@ -928,6 +950,7 @@ function saveCfg(){
   c.Port=+$("c-port").value;c.Lat=+$("c-lat").value;c.Lon=+$("c-lon").value;c.PollMin=+$("c-poll").value;
   c.AlarmFile=$("c-alarm").value.trim();c.AlarmAheadMin=+$("c-ahead").value||0;
   c.NormSys=+$("c-norms").value;c.NormDia=+$("c-normd").value;c.PopupCooldownMin=+$("c-cd").value;
+  c.Dob=$("c-dob").value;c.Sex=$("c-sex").value;
   c.Ha=c.Ha||{Url:"",Token:"",Sensors:{pressure:"",temp:"",humidity:"",kp:""}};
   c.Ha.Url=$("c-ha-url").value.trim();c.Ha.Token=$("c-ha-tok").value.trim();
   c.Ha.Sensors={pressure:$("c-ha-s0").value.trim(),temp:$("c-ha-s1").value.trim(),

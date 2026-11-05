@@ -16,35 +16,35 @@ using MiniExcelLibs;
 namespace BpMonitor
 {
 // Экспорт CSV/XLSX, отчёт врача, импорт сна, перенос всего одним JSON
-static partial class App
+partial class Profile
 {
 	// ----------------------------- экспорт -----------------------------
-	static string CsvLine(params object[] vals){
+	string CsvLine(params object[] vals){
 		return string.Join(";",vals.Select(v=>{
 			string s=v==null?"":Convert.ToString(v,CultureInfo.InvariantCulture)?.Replace("\"","\"\"");
 			return s!=null&&(s.Contains(";")||s.Contains("\"")||s.Contains("\n"))?"\""+s+"\"":s;
 		}));
 	}
-	private static int? JInt(JObject f,string key){
+	private int? JInt(JObject f,string key){
 		if(f[key]==null) return null;
 		return int.TryParse(f[key].ToString().Trim(),out int i)?(int?)i:null;
 	}
 	// JToken -> DateTime: Newtonsoft сам превращает ISO-строки с секундами в Date JValue,
 	// а .ToString() у него идёт через текущую культуру (ru: "11.06.2026") -> инвариантный парсер меняет день/месяц
-	public static DateTime JT(JObject jo,string key){
+	public DateTime JT(JObject jo,string key){
 		JToken t=jo[key];
 		if(t==null) throw new FormatException("нет поля "+key);
 		if(t.Type==JTokenType.Date) return (DateTime)t;
 		return DateTime.Parse(t.ToString(),CultureInfo.InvariantCulture,DateTimeStyles.None);
 	}
-	static DateTime? JDate(JObject f,string key){
+	DateTime? JDate(JObject f,string key){
 		if(f[key]==null) return null;
 		string s=f[key].ToString().Trim();
 		if(s=="") return null;
 		DateTime d;
 		return DateTime.TryParse(s,out d)?(DateTime?)d:null;
 	}
-	public static List<Measurement> Filtered(JObject f){
+	public List<Measurement> Filtered(JObject f){
 		List<Measurement> list=D.M.ToList()??throw new ArgumentNullException("D.M.ToList()");
 		DateTime? from=JDate(f,"from");
 		DateTime? to=JDate(f,"to");
@@ -59,7 +59,7 @@ static partial class App
 		if(f["onlyMeds"]!=null&&(bool)f["onlyMeds"]) list=list.Where(m=>m.Meds.Count>0).ToList();
 		return list.OrderBy(m=>m.T).ToList();// в отчётах — старые сверху
 	}
-	static List<Dictionary<string,object>> DoctorRows(List<Measurement> list){
+	List<Dictionary<string,object>> DoctorRows(List<Measurement> list){
 		List<Dictionary<string,object>> rows=new List<Dictionary<string,object>>();
 		int maxPerDay=list.GroupBy(m=>m.T.Date).Select(g=>g.Count()).DefaultIfEmpty(0).Max();
 		maxPerDay=Math.Min(Math.Max(maxPerDay,6),8);
@@ -86,7 +86,7 @@ static partial class App
 		}
 		return rows;
 	}
-	static List<Dictionary<string,object>> RowRows(List<Measurement> list){
+	List<Dictionary<string,object>> RowRows(List<Measurement> list){
 		List<Dictionary<string,object>> rows=new List<Dictionary<string,object>>();
 		foreach(Measurement m in list)
 			rows.Add(new Dictionary<string,object>{
@@ -100,7 +100,7 @@ static partial class App
 			});
 		return rows;
 	}
-	static List<Dictionary<string,object>> DayRows(List<Measurement> list){
+	List<Dictionary<string,object>> DayRows(List<Measurement> list){
 		List<Dictionary<string,object>> rows=new List<Dictionary<string,object>>();
 		foreach(IGrouping<DateTime,Measurement> day in list.GroupBy(m=>m.T.Date).OrderBy(g=>g.Key)){
 			List<Measurement> ms=day.ToList();
@@ -119,7 +119,7 @@ static partial class App
 		}
 		return rows;
 	}
-	public static byte[] BuildExport(JObject f,string kind,string fmt,out string filename,out string ctype){
+	public byte[] BuildExport(JObject f,string kind,string fmt,out string filename,out string ctype){
 		ctype="text/csv";
 		List<Measurement> list=Filtered(f);
 		DateTime from=list.Count>0?list.First().T:DateTime.Now.AddDays(-7);
@@ -170,7 +170,7 @@ static partial class App
 	}
 
 	// ----------------------------- импорт сна (Mi Band / Mi Fit CSV) -----------------------------
-	public static int ImportSleepCsv(string text,out string err,List<SleepEntry> addedList=null){
+	public int ImportSleepCsv(string text,out string err,List<SleepEntry> addedList=null){
 		err="";
 		int added=0;
 		Regex dateRe=new Regex(@"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})|(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})");
@@ -225,7 +225,7 @@ static partial class App
 	// ----------------------------- перенос: экспорт/импорт всего одним файлом -----------------------------
 	// Единый JSON-снимок: настройки + все данные + веса НН + справочник ФК.
 	// GET /api/export/all скачивает его, POST /api/import/all восстанавливает (с автобэкапом перед заменой).
-	public static JObject ExportAll(){
+	public JObject ExportAll(){
 		return new JObject{
 			["app"]="BpMonitor",
 			["ver"]=1,
@@ -243,7 +243,7 @@ static partial class App
 			["medpk"]=JObject.FromObject(MedPkDb)
 		};
 	}
-	public static string ImportAll(JObject j){
+	public string ImportAll(JObject j){
 		if((string)j["app"]!="BpMonitor") throw new Exception("это не файл экспорта BpMonitor");
 		int ver=(int?)j["ver"]??0;
 		if(ver<1) throw new Exception("неподдерживаемая версия файла: "+ver);

@@ -7,8 +7,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace BpMonitor{
-static partial class App{
-	public static JObject StateJson(){
+partial class Profile{
+	public JObject StateJson(){
 		(double sys,double dia) p=PredictNow();
 		double kpFc=0; DateTime u0=DateTime.UtcNow;
 		foreach(KeyValuePair<DateTime,double> fp in KpForecast) if(fp.Key>=u0&&fp.Key<=u0.AddHours(24)&&fp.Value>kpFc) kpFc=fp.Value;
@@ -36,7 +36,7 @@ static partial class App{
 			}
 		};
 	}
-	public static JArray Predictions(){
+	public JArray Predictions(){
 		JArray arr=new JArray();
 		foreach(Measurement m in D.M.OrderBy(m=>m.T)){
 			double[] y=Forward(D.Nn,FeatsFor(m));
@@ -44,7 +44,7 @@ static partial class App{
 		}
 		return arr;
 	}
-	static JObject MaskToken(JObject cfg){
+	JObject MaskToken(JObject cfg){
 		JToken t;
 		if(cfg["Ha"]!=null&&cfg["Ha"]["Token"]!=null&&(t=cfg["Ha"]["Token"]).ToString()!="")
 			cfg["Ha"]["Token"]=TokenMask;
