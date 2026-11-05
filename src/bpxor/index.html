@@ -140,6 +140,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
         <thead><tr><th>Дата</th><th>Врем</th><th>Сис</th><th>Диаст</th><th>Пульс</th><th>мм</th><th>°C</th><th>Kp</th><th>Погода</th><th>Лекарства</th><th>Контекст</th><th>Прим.</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+      <div id="hist-more" style="margin-top:8px"></div>
     </section>
   </div>
 
@@ -289,7 +290,6 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
     <section>
       <h3>Общее</h3>
       <div class="grid">
-        <label>Порт <input type="number" id="c-port" style="width:70px"></label>
         <label>Широта <input type="number" step="0.0001" id="c-lat" style="width:92px"></label>
         <label>Долгота <input type="number" step="0.0001" id="c-lon" style="width:92px"></label>
         <label>Опрос погоды, мин <input type="number" id="c-poll" style="width:60px"></label>
@@ -440,15 +440,55 @@ function renderActive(){
   else if(act==="cfg")fillCfg();
 }
 
-/* ---------- состояние ---------- */
-let tzSent=false;
+/* ---------- состояние (Фаза 5: дельта-синхронизация + SSE вместо полного поллинга) ---------- */
+let tzSent=false,SYNC=null,es=null,pollTimer=null,histShown=200;
 async function loadState(){
   try{S=await (await fetch("/api/state")).json();}catch(e){return;}
+  SYNC=S.sync||null;
+  S.measLoadedAll=(S.measTotal==null)||(S.measTotal<=(S.measurements||[]).length);
   if(!tzSent&&S.cfg){tzSent=true;try{const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.cfg.Tz!==tz)apiPost("/api/config",{Tz:tz});}catch(e){}}
   renderHeader();
   if(act!=="cfg")renderActive(); // не затираем форму настроек во время ввода
 }
-setInterval(loadState,30000);
+async function loadDelta(){
+  if(!S||!SYNC){await loadState();return;}
+  let d;
+  try{d=await (await fetch(`/api/delta?since=${SYNC.seq}&gen=${SYNC.gen}&cfgRev=${SYNC.cfgRev}&nnRev=${SYNC.nnRev}&wxRev=${SYNC.wxRev}&pkRev=${SYNC.pkRev}`)).json();}catch(e){return;}
+  if(d.reset){await loadState();return;}
+  SYNC={gen:d.gen,seq:d.seq,cfgRev:d.cfgRev,nnRev:d.nnRev,wxRev:d.wxRev,pkRev:d.pkRev};
+  if(!d.changed)return;
+  mergeArr("measurements",d.meas,d.measDel);
+  mergeArr("emotions",d.emo,d.emoDel);
+  mergeArr("noises",d.noi,d.noiDel);
+  mergeArr("sleeps",d.sleep,d.sleepDel);
+  mergeArr("medtakes",d.medtake,d.medtakeDel);
+  if(d.cfg){S.cfg=d.cfg;S.medPk=d.medPk;}
+  if(d.weather)S.weather=d.weather;
+  if(d.nn)S.nn=d.nn;
+  if(d.medPkDb)S.medPkDb=d.medPkDb;
+  renderHeader();
+  if(act!=="cfg")renderActive();
+}
+// upsert по Id + тумстоуны, сортировка новые-first — та же семантика, что у загрузки журнала
+function mergeArr(key,adds,dels){
+  if(!adds&&!dels)return;
+  let a=S[key]||[];
+  if(dels&&dels.length)a=a.filter(x=>dels.indexOf(x.Id)<0);
+  if(adds&&adds.length){
+    const ids=new Set(adds.map(x=>x.Id));
+    a=a.filter(x=>!ids.has(x.Id)).concat(adds);
+  }
+  a.sort((x,y)=>new Date(y.T)-new Date(x.T));
+  S[key]=a;
+}
+function connectEvents(){
+  try{es=new EventSource("/api/events");}catch(e){return;}
+  es.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.t==="change"||m.t==="job")loadDelta();}catch(err){}};
+  es.onopen=()=>{if(pollTimer){clearInterval(pollTimer);pollTimer=null;}};// SSE жив — фоновый опрос не нужен
+  es.onerror=()=>{if(es&&es.readyState===EventSource.CLOSED&&!pollTimer)pollTimer=setInterval(loadDelta,30000);};
+}
+pollTimer=setInterval(loadDelta,30000);// фолбэк до установки SSE
+connectEvents();
 
 function renderHeader(){
   const w=S.weather||{};
@@ -584,9 +624,11 @@ function fList(){
 }
 function renderHist(){
   const l=fList();
-  $("h-count").textContent="("+l.length+")";
-  drawBp(l.slice().sort((a,b)=>new Date(a.T)-new Date(b.T)));
-  document.querySelector("#hist-t tbody").innerHTML=l.map(m=>{
+  const total=S.measTotal!=null?S.measTotal:l.length;
+  $("h-count").textContent="("+l.length+(total>l.length?" из "+total:"")+")";
+  drawBp(l.slice(0,histShown).sort((a,b)=>new Date(a.T)-new Date(b.T)));
+  $("hist-more").innerHTML=(l.length>histShown||!S.measLoadedAll)?'<button onclick="histMore()">Показать ещё</button>':"";
+  document.querySelector("#hist-t tbody").innerHTML=l.slice(0,histShown).map(m=>{
     const ctx=[m.EmotionLabel?m.EmotionLabel:null,m.SleepH!=null?"сон "+m.SleepH.toFixed(1)+" ч":null,
       m.Noise&&m.Noise.length?"шум: "+m.Noise.join(", "):null].filter(Boolean).join("; ");
     return `<tr><td>${fdt(m.T)}</td><td>${fhm(m.T)}</td><td>${m.Sys}</td><td>${m.Dia}</td><td>${m.Pulse}</td>`+
@@ -594,6 +636,19 @@ function renderHist(){
       `<td>${esc(m.Wx||"")}</td><td>${esc(m.Meds.join(", "))}</td><td class="mut">${esc(ctx)}</td><td class="mut">${esc(m.Note||"")}</td>`+
       `<td><button onclick="editM('${m.Id}')">изм</button> <button onclick="delM('${m.Id}')">✕</button></td></tr>`;
   }).join("")||'<tr><td colspan="13" class="mut">нет данных</td></tr>';
+}
+// подгрузка старых записей окном: сначала дорисовываем загруженное, потом тянем со сервера
+async function histMore(){
+  const l=fList();
+  if(l.length>histShown){histShown+=200;renderHist();return;}
+  if(S.measLoadedAll||!S.measurements.length)return;
+  const oldest=S.measurements[S.measurements.length-1].T;
+  let r;try{r=await (await fetch("/api/measurements?before="+encodeURIComponent(oldest)+"&limit=200")).json();}catch(e){return;}
+  if(!r.items||!r.items.length){S.measLoadedAll=true;renderHist();return;}
+  mergeArr("measurements",r.items,null);
+  if(!r.hasMore)S.measLoadedAll=true;
+  histShown+=200;
+  renderHist();
 }
 /* график АД по отфильтрованному списку: sys/dia/pulse по времени */
 function drawBp(l){
@@ -947,7 +1002,7 @@ function delMd(i){S.cfg.Meds.splice(i,1);apiPost("/api/config",S.cfg).then(loadS
 /* ---------- настройки ---------- */
 function fillCfg(){
   const c=S.cfg;
-  $("c-port").value=c.Port;$("c-lat").value=c.Lat;$("c-lon").value=c.Lon;$("c-poll").value=c.PollMin;
+  $("c-lat").value=c.Lat;$("c-lon").value=c.Lon;$("c-poll").value=c.PollMin;
   $("c-alarm").value=c.AlarmFile||"";$("c-ahead").value=c.AlarmAheadMin;
   $("c-norms").value=c.NormSys;$("c-normd").value=c.NormDia;$("c-cd").value=c.PopupCooldownMin;
   $("c-dob").value=c.Dob||"";$("c-sex").value=c.Sex||"";
@@ -958,7 +1013,7 @@ function fillCfg(){
   $("c-ha-s0").value=s.pressure||"";$("c-ha-s1").value=s.temp||"";
   $("c-ha-s2").value=s.humidity||"";$("c-ha-s3").value=s.kp||"";
   $("c-lr").value=c.Nn.Lr;$("c-hid").value=c.Nn.Hidden;$("c-hid2").value=c.Nn.Hidden2;$("c-ep").value=c.Nn.Epochs;
-  const miss=(S.measurements||[]).filter(m=>m.PressMm==null||m.TempC==null||m.Hum==null||m.Kp==null).length;
+  const miss=S.wxMissing!=null?S.wxMissing:(S.measurements||[]).filter(m=>m.PressMm==null||m.TempC==null||m.Hum==null||m.Kp==null).length;
   $("c-wxb").textContent=miss?("Заполнить погоду ("+miss+")"):"Погода заполнена ✓";
 }
 function toggleAuto(on){
@@ -969,7 +1024,7 @@ function toggleAuto(on){
 }
 function saveCfg(){
   const c=S.cfg;
-  c.Port=+$("c-port").value;c.Lat=+$("c-lat").value;c.Lon=+$("c-lon").value;c.PollMin=+$("c-poll").value;
+  c.Lat=+$("c-lat").value;c.Lon=+$("c-lon").value;c.PollMin=+$("c-poll").value;
   c.AlarmFile=$("c-alarm").value.trim();c.AlarmAheadMin=+$("c-ahead").value||0;
   c.NormSys=+$("c-norms").value;c.NormDia=+$("c-normd").value;c.PopupCooldownMin=+$("c-cd").value;
   c.Dob=$("c-dob").value;c.Sex=$("c-sex").value;
@@ -981,13 +1036,8 @@ function saveCfg(){
   c.Nn.Lr=+$("c-lr").value;c.Nn.Hidden=+$("c-hid").value;c.Nn.Hidden2=+$("c-hid2").value||16;c.Nn.Epochs=+$("c-ep").value;
   apiPost("/api/config",c).then(j=>{
     if(!j.ok){$("cfg-msg").textContent="";flash(j.err||"Ошибка",false);return;}
-    if(j.restartRequired){
-      $("cfg-msg").textContent="⚠ Порт изменён — перезапустите приложение (Выход в трее и запуск снова).";
-      flash("Порт изменён — нужен перезапуск",false);
-    }else{
-      $("cfg-msg").textContent="Сохранено "+new Date().toTimeString().slice(0,5);
-      flash("Настройки сохранены");
-    }
+    $("cfg-msg").textContent="Сохранено "+new Date().toTimeString().slice(0,5);
+    flash("Настройки сохранены");
     loadState();
   });
 }

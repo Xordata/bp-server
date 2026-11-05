@@ -164,6 +164,7 @@ partial class Profile
 			Weather.Updated=DateTime.Now;
 			MaybePopup("погода");
 			MaybePopupForecast();
+			PublishChange();// погода обновилась — вкладки обновят шапку через дельту
 		} catch(Exception ex){ Log("PollWeather: "+ex.Message); } finally{ _weatherBusy=false; }
 	}
 	// symbol_code met.no -> ближайший код WMO (дальше работает общий WmoText)

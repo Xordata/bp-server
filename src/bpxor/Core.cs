@@ -70,7 +70,9 @@ partial class Profile
 	public string CurrentJobName{ get{ lock(JobLock){ return _job!=null?_job.Name:null; } } }
 	public string JobResult{ get{ Job j=_job; return j!=null?j.Result:null; } set{ Job j=_job; if(j!=null) j.Result=value; } }
 	public string JobError{ set{ Job j=_job; if(j!=null) j.Error=value; } }
-	public void FinishJob(){ Job j=_job; if(j!=null) j.Running=false; }
+	public void FinishJob(){ Job j=_job; if(j!=null) j.Running=false; PublishChange("job"); }
+	// Фаза 5: событие для SSE-подписчиков вкладки этого юзера (EventHub)
+	public void PublishChange(string type="change"){ try{ EventHub.Publish(Uid,"{\"t\":\""+type+"\"}"); } catch{} }
 	public bool JobQueued{ get{ Job j=_job; return j!=null&&j.Queued; } set{ Job j=_job; if(j!=null) j.Queued=value; } }
 	public JObject JobJson(){
 		Job j=_job;

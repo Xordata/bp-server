@@ -26,7 +26,7 @@ partial class Profile
 		int failed=0;
 		Action<string,Action> check=(name,f)=>{
 			try{ f(); Console.WriteLine("PASS  "+name); }
-			catch(Exception ex){ failed++; Console.WriteLine("FAIL  "+name+": "+ex.Message); }
+			catch(Exception ex){ failed++; Console.WriteLine("FAIL  "+name+": "+ex.Message); Console.WriteLine(ex.StackTrace); }
 		};
 		CultureInfo savedCulture=Thread.CurrentThread.CurrentCulture;
 		check("FireToday: daily",()=>{
@@ -181,6 +181,61 @@ partial class Profile
 			if(after>=before) throw new Exception("после компакции файл должен стать меньше: "+before+" -> "+after);
 			D=new DataStore(); LoadBin();
 			if(D.M.Count!=1||D.N.Count!=1||D.S.Count!=1) throw new Exception("данные потеряны при компакции");
+		});
+		check("delta: курсор seq и записи",()=>{
+			long gen=BinGen; long s0=BinSeq;
+			AppendMeasurement(new Measurement{Id=Guid.NewGuid().ToString("N"),T=DateTime.Now.AddHours(-3),Sys=118,Dia=76,Pulse=64});
+			AppendEmotion(new EmotionEntry{Id=Guid.NewGuid().ToString("N"),T=DateTime.Now.AddHours(-2),Val=3,Note=""});
+			JObject d=DeltaJson(s0,gen,RevCfg,RevNn,RevWx,RevMedPk);
+			if(d["reset"]!=null) throw new Exception("неожиданный reset");
+			JArray meas=d["meas"] as JArray; JArray emo=d["emo"] as JArray;
+			if(meas==null||meas.Count!=1) throw new Exception("meas: "+(meas==null?"null":meas.Count.ToString()));
+			if(emo==null||emo.Count!=1) throw new Exception("emo: "+(emo==null?"null":emo.Count.ToString()));
+			if((long)d["seq"]<=s0) throw new Exception("seq не вырос");
+			if(!(bool)d["changed"]) throw new Exception("changed должен быть true");
+			JObject d2=DeltaJson((long)d["seq"],gen,RevCfg,RevNn,RevWx,RevMedPk);
+			if((bool)d2["changed"]) throw new Exception("на чистом курсоре changed должен быть false");
+			if((long)d2["seq"]!=(long)d["seq"]) throw new Exception("seq уехал");
+		});
+		check("delta: reset при компакции и битом курсоре",()=>{
+			long oldSeq=BinSeq,oldGen=BinGen;
+			Save(); // компакция -> новое поколение
+			if(BinGen==oldGen) throw new Exception("gen не вырос после Save()");
+			JObject d=DeltaJson(oldSeq,oldGen,RevCfg,RevNn,RevWx,RevMedPk);
+			if(d["reset"]==null) throw new Exception("старый gen должен давать reset");
+			JObject d2=DeltaJson(BinSeq+1000,BinGen,RevCfg,RevNn,RevWx,RevMedPk);
+			if(d2["reset"]==null) throw new Exception("since>len должен давать reset");
+			JObject d3=DeltaJson(BinSeq,BinGen,RevCfg,RevNn,RevWx,RevMedPk);
+			if(d3["reset"]!=null||(bool)d3["changed"]) throw new Exception("свежий курсор должен быть чист");
+		});
+		check("delta: ревизии cfg/medpk выносят блок",()=>{
+			Cfg.NormSys=139; SaveCfg();
+			JObject d=DeltaJson(BinSeq,BinGen,RevCfg-1,RevNn,RevWx,RevMedPk);
+			if(d["cfg"]==null) throw new Exception("нет блока cfg");
+			if((int)d["cfg"]["NormSys"]!=139) throw new Exception("содержимое cfg");
+			if(d["medPk"]==null) throw new Exception("нет блока medPk");
+			Cfg.NormSys=135; SaveCfg();
+		});
+		check("measurements: окно before/limit",()=>{
+			for(int i=0;i<5;i++) D.M.Add(new Measurement{Id=Guid.NewGuid().ToString("N"),T=DateTime.Now.AddDays(-10-i),Sys=120,Dia=80,Pulse=70});
+			JObject w=MeasurementsWindow(DateTime.Now,2);
+			if(((JArray)w["items"]).Count!=2) throw new Exception("limit не сработал");
+			if(!(bool)w["hasMore"]) throw new Exception("hasMore должен быть true");
+			DateTime oldest=((JObject)((JArray)w["items"])[1])["T"].Value<DateTime>();
+			JObject w2=MeasurementsWindow(oldest,100);
+			if(((JArray)w2["items"]).Count==0) throw new Exception("старше not пришли");
+			if(((JArray)w2["items"]).Any(x=>x["T"].Value<DateTime>()>=oldest)) throw new Exception("before не соблюдён");
+		});
+		check("state: sync-блок, кап окна, ETag",()=>{
+			if(D.Nn==null) D.Nn=NewNn(Cfg.Nn.Hidden,Cfg.Nn.Hidden2,InDim());// в песочнице модель не загружалась
+			JObject st=StateJson();
+			if(st["sync"]==null) throw new Exception("нет sync");
+			if((long)st["sync"]["seq"]!=BinSeq) throw new Exception("seq не совпал");
+			if(st["measTotal"]==null||(int)st["measTotal"]!=D.M.Count) throw new Exception("measTotal");
+			if(((JArray)st["measurements"]).Count>D.M.Count) throw new Exception("окно больше всей базы");
+			string e1=SyncEtag;
+			AppendMeasurement(new Measurement{Id=Guid.NewGuid().ToString("N"),T=DateTime.Now,Sys=122,Dia=81,Pulse=69});
+			if(SyncEtag==e1) throw new Exception("ETag не прореагировал на append");
 		});
 		check("medpk.json: создание из эталона, чтение, MedKtFor",()=>{
 			string p=Path.Combine(ExeDir,"medpk.json");

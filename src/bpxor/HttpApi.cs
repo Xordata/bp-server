@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -27,15 +28,15 @@ static class HttpApi{
 
 	public static void Map(WebApplication app){
 		// ---------- статика ----------
-		app.MapMethods("/",new[]{HttpMethods.Get,HttpMethods.Head},()=>Index());
-		app.MapMethods("/index.html",new[]{HttpMethods.Get,HttpMethods.Head},()=>Index());
+		app.MapMethods("/",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Index(ctx));
+		app.MapMethods("/index.html",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Index(ctx));
 		app.MapGet("/alarm.mp3",()=>{
 			string p=Path.Combine(AppContext.BaseDirectory,"alarm.mp3");
 			return System.IO.File.Exists(p)?Results.File(p,"audio/mpeg"):Results.NotFound();
 		});
 		// F1/F2: PWA-манифест, страница быстрого замера, иконки (все за сессией — AuthGate)
-		app.MapMethods("/q",new[]{HttpMethods.Get,HttpMethods.Head},()=>StaticText("q.html","text/html; charset=utf-8"));
-		app.MapMethods("/manifest.webmanifest",new[]{HttpMethods.Get,HttpMethods.Head},()=>StaticText("manifest.webmanifest","application/manifest+json"));
+		app.MapMethods("/q",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"q.html","text/html; charset=utf-8"));
+		app.MapMethods("/manifest.webmanifest",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"manifest.webmanifest","application/manifest+json"));
 		app.MapGet("/icons/{file}",(string file)=>{
 			if(file==null||!System.Text.RegularExpressions.Regex.IsMatch(file,"^[a-z0-9-]+[.]png$")) return Results.NotFound();
 			string p=Path.Combine(AppContext.BaseDirectory,"icons",file);
@@ -43,7 +44,32 @@ static class HttpApi{
 		});
 
 		// ---------- GET ----------
-		app.MapMethods("/api/state",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>Json(P(ctx).StateJson()))());
+		app.MapMethods("/api/state",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>{
+			Profile pr=P(ctx);
+			string etag=pr.SyncEtag;// курсор снимка как ETag: повторный опрос без изменений -> 304 без тела
+			ctx.Response.Headers["ETag"]=etag;
+			if((string)ctx.Request.Headers["If-None-Match"]==etag) return Results.StatusCode(304);
+			return Json(pr.StateJson());
+		})());
+		// Фаза 5: дельта-синхронизация (курсор gen:seq + ревизии cfg/nn/wx/medpk)
+		app.MapMethods("/api/delta",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>{
+			Profile pr=P(ctx);
+			long Ql(string k){ long v; return long.TryParse((string)ctx.Request.Query[k],out v)?v:-1; }
+			return Json(pr.DeltaJson(Ql("since"),Ql("gen"),Ql("cfgRev"),Ql("nnRev"),Ql("wxRev"),Ql("pkRev")));
+		})());
+		// Фаза 5: окно истории (старше before, новые-first)
+		app.MapMethods("/api/measurements",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>{
+			Profile pr=P(ctx);
+			int limit; if(!int.TryParse((string)ctx.Request.Query["limit"],out limit)||limit<1) limit=200;
+			if(limit>1000) limit=1000;
+			DateTime before=DateTime.MaxValue;
+			string b=(string)ctx.Request.Query["before"];
+			if(!string.IsNullOrEmpty(b)){
+				DateTime bt;
+				if(DateTime.TryParse(b,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out bt)) before=bt;
+			}
+			return Json(pr.MeasurementsWindow(before,limit));
+		})());
 		app.MapMethods("/api/nn/predictions",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>{Profile pr=P(ctx);lock(pr.Sync){return Json(pr.Predictions());}})());
 		app.MapMethods("/api/version",new[]{HttpMethods.Get,HttpMethods.Head},()=>Json(new{version="bpxor 0.1.0"}));
 		app.MapMethods("/api/job",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Json(P(ctx).JobJson()));
@@ -54,6 +80,31 @@ static class HttpApi{
 				byte[] b=Encoding.UTF8.GetBytes(pr.ExportAll().ToString(Formatting.Indented));
 				return Results.File(b,"application/json; charset=utf-8","bpmonitor-export-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json");
 			}
+		});
+
+		// ---------- Фаза 5: SSE — сервер сам толкает «change», поллинг state не нужен ----------
+		app.MapGet("/api/events",async ctx=>{
+			Profile pr=P(ctx);
+			ctx.Response.Headers["Content-Type"]="text/event-stream";
+			ctx.Response.Headers["Cache-Control"]="no-cache, no-transform";
+			ctx.Response.Headers["X-Accel-Buffering"]="no";// nginx: не буферизовать (в конфиге тоже proxy_buffering off)
+			System.Threading.Channels.Channel<string> ch=EventHub.Subscribe(pr.Uid);
+			await ctx.Response.Body.FlushAsync();
+			try{
+				while(true){
+					string msg=null; bool got=false;
+					using(CancellationTokenSource cts=CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted)){
+						cts.CancelAfter(TimeSpan.FromSeconds(25));
+						try{ msg=await ch.Reader.ReadAsync(cts.Token); got=true; }
+						catch(OperationCanceledException){}
+						catch(Exception){ break; }
+					}
+					if(ctx.RequestAborted.IsCancellationRequested) break;
+					await ctx.Response.WriteAsync(got?"data: "+msg+"\n\n":":hb\n\n");
+					await ctx.Response.Body.FlushAsync();
+				}
+			} catch{}
+			finally{ EventHub.Unsubscribe(pr.Uid,ch); }
 		});
 
 		// ---------- запуск фоновых задач (вне lock: сама задача держит Sync минутами) ----------
@@ -151,6 +202,7 @@ static class HttpApi{
 			string oldDob=p.Cfg.Dob??"",oldSex=p.Cfg.Sex??"";
 			Config nc=JsonConvert.DeserializeObject<Config>(JsonConvert.SerializeObject(p.Cfg),new JsonSerializerSettings{ObjectCreationHandling=ObjectCreationHandling.Replace});
 			JsonConvert.PopulateObject(body,nc,new JsonSerializerSettings{ObjectCreationHandling=ObjectCreationHandling.Replace});// Replace: массивы из тела ЗАМЕНЯЮТ существующие
+			nc.Port=oldPort;// веб-версия: порт сервера не настраивается из UI (только bpxor.config.json)
 			if(nc.Ha!=null&&nc.Ha.Token==Profile.TokenMask) nc.Ha.Token=oldToken;
 			nc.Meds=nc.Meds.Where(x=>!string.IsNullOrWhiteSpace(x)).Select(x=>x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 			nc.Noises=nc.Noises.Where(x=>!string.IsNullOrWhiteSpace(x)).Select(x=>x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -168,7 +220,7 @@ static class HttpApi{
 			p.SaveCfg();
 			p.EnsureNnDim();
 			if(p.Cfg.Dob!=oldDob||p.Cfg.Sex!=oldSex){ p.Train(); p.SaveNn(); }// возраст/пол поменялись -> переучить модель на новых значениях фич
-			return Json(new{ok=true,restartRequired=p.Cfg.Port!=oldPort});
+			return Json(new{ok=true});
 		}));
 		app.MapPost("/api/autostart",ctx=>Post(ctx,(p,jo,body)=>{ p.SetAutostart((bool)jo["on"]); p.SaveCfg(); return Json(new{ok=true}); }));
 		app.MapPost("/api/alarm/test",ctx=>Post(ctx,(p,jo,body)=>{ p.StartAlarm(); return Json(new{ok=true}); }));
@@ -231,6 +283,7 @@ static class HttpApi{
 		app.MapPost("/api/weather/refresh",async ctx=>{
 			Profile pr=(Profile)ctx.Items["profile"];
 			await pr.PollWeatherAsync();
+			pr.PublishChange();
 			await Json(new{ok=true}).ExecuteAsync(ctx);
 		});
 		app.MapPost("/api/export",ctx=>Post(ctx,(p,jo,body)=>{
@@ -273,21 +326,27 @@ static class HttpApi{
 			st.DismissedKey=!string.IsNullOrWhiteSpace(key)?key:st.RingingKey;
 			st.RingingKey=""; st.RingingLabel="";
 			st.Save();
+			pr.PublishChange();
 			await Json(new{ok=true,dismissed=st.DismissedKey}).ExecuteAsync(ctx);
 		});
 	}
 
-	static IResult StaticText(string fname,string ctype){
+	static IResult StaticText(HttpContext ctx,string fname,string ctype){
 		string p=Path.Combine(AppContext.BaseDirectory,fname);
 		if(!System.IO.File.Exists(p)) return Results.NotFound();
-		return Results.Content(System.IO.File.ReadAllText(p),ctype);
+		return StaticFile(ctx,p,ctype);
 	}
-	static IResult Index(){
+	// mtime+length как ETag: nginx и браузер получают 304 без тела
+	static IResult StaticFile(HttpContext ctx,string path,string ctype){
+		FileInfo fi=new FileInfo(path);
+		string etag="\""+fi.LastWriteTimeUtc.Ticks.ToString("x")+"-"+fi.Length.ToString("x")+"\"";
+		if((string)ctx.Request.Headers["If-None-Match"]==etag) return Results.StatusCode(304);
+		ctx.Response.Headers["ETag"]=etag;
+		return Results.Content(System.IO.File.ReadAllText(path),ctype);
+	}
+	static IResult Index(HttpContext ctx){
 		string ip=Path.Combine(AppContext.BaseDirectory,"index.html");
-		if(System.IO.File.Exists(ip)){
-			byte[] b=System.IO.File.ReadAllBytes(ip);
-			return Results.Content(Encoding.UTF8.GetString(b),"text/html; charset=utf-8");
-		}
+		if(System.IO.File.Exists(ip)) return StaticFile(ctx,ip,"text/html; charset=utf-8");
 		return Results.Content("<h3>index.html не найден рядом с бинарём</h3>","text/html; charset=utf-8");
 	}
 
@@ -308,6 +367,7 @@ static class HttpApi{
 				JObject jo=body.Length>0?JObject.Parse(body):new JObject();
 				Profile p=P(ctx);
 				lock(p.Sync){ r=f(p,jo,body); }
+				p.PublishChange();// Фаза 5: подписанные вкладки получают дельту мгновенно (SSE)
 			} catch(Exception ex){ r=Err(ex.Message); }
 		} catch(Exception ex){ r=Err(ex.Message); }
 		await r.ExecuteAsync(ctx);

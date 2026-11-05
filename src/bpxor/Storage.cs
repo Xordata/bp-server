@@ -109,7 +109,7 @@ partial class Profile
 				string tmp=DataBinPath+".tmp";
 				_pool.Clear(); _poolNext=0;
 				using(BinaryWriter w=new BinaryWriter(File.Create(tmp))){
-					w.Write(BinMagic); w.Write(BinVer);
+					w.Write(BinMagic); w.Write((byte)3); w.Write(_binGen+1);// v3: поколение журнала
 					Func<string,int> pool=PoolWriter(w);
 					foreach(Measurement m in D.M.OrderBy(x=>x.T)) WriteRec(w,RecMeas,MeasPayload(m,pool));
 					foreach(EmotionEntry e in D.E.OrderBy(x=>x.T)) WriteRec(w,RecEmo,EmoPayload(e,pool));
@@ -120,6 +120,7 @@ partial class Profile
 				}
 				if(File.Exists(DataBinPath)) File.Delete(DataBinPath);
 				File.Move(tmp,DataBinPath);
+				_binGen++; _hdrSize=13;// компакция = новое поколение: все клиентские курсоры по offset сбрасываются
 			} catch{
 				/* В/В не критичен для живости UI */
 			}
@@ -245,7 +246,7 @@ partial class Profile
 		Directory.CreateDirectory(Path.GetDirectoryName(DataBinPath)??"");
 		bool fresh=!File.Exists(DataBinPath)||new FileInfo(DataBinPath).Length==0;
 		BinaryWriter w=new BinaryWriter(File.Open(DataBinPath,FileMode.Append));
-		if(fresh){ w.Write(BinMagic); w.Write(BinVer); }// журнал создан дописыванием — заголовок на месте
+		if(fresh){ w.Write(BinMagic); w.Write(BinVer); _hdrSize=5; }// журнал создан дописыванием — заголовок на месте
 		return w;
 	}
 	void AppendRec(byte type,byte[] payload){
@@ -260,6 +261,50 @@ partial class Profile
 	void AppendPopup(){ if(D.LastPopup!=null) AppendRec(RecPopup,RecPayload(w=>w.Write(D.LastPopup.Value.Ticks))); }
 	bool SameId(string id,Guid g){ Guid g2; return Guid.TryParse(id,out g2)&&g2==g; }
 	string GetPool(Dictionary<int,string> pool,int id){ string s3; return pool.TryGetValue(id,out s3)?s3:""; }
+	// Декодеры записей журнала — общие для LoadBin (полная загрузка) и дельта-синхронизации (Delta.cs).
+	Measurement ReadMeas(BinaryReader p,Dictionary<int,string> pool){
+		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
+		int sys=p.ReadUInt16(),dia=p.ReadUInt16(),pulse=p.ReadUInt16();
+		byte fl=p.ReadByte();
+		float? press=(fl&1)!=0?(float?)p.ReadSingle():null;
+		float? temp=(fl&2)!=0?(float?)p.ReadSingle():null;
+		float? hum=(fl&4)!=0?(float?)p.ReadSingle():null;
+		int? kp=(fl&8)!=0?(int?)p.ReadInt16():null;
+		float? emo=(fl&16)!=0?(float?)p.ReadSByte():null;
+		float? sleepH=(fl&32)!=0?(float?)p.ReadSingle():null;
+		int? sleepQ=(fl&64)!=0?(int?)p.ReadByte():null;
+		int wxId=p.ReadUInt16();
+		int mc=p.ReadByte(); List<string> meds=new List<string>();
+		for(int i2=0;i2<mc;i2++) meds.Add(GetPool(pool,p.ReadUInt16()));
+		int nc=p.ReadByte(); List<string> noise=new List<string>();
+		for(int i2=0;i2<nc;i2++) noise.Add(GetPool(pool,p.ReadUInt16()));
+		string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
+		return new Measurement{
+			Id=g.ToString("N"),T=t,Sys=sys,Dia=dia,Pulse=pulse,
+			PressMm=press,TempC=temp,Hum=hum,Kp=kp,SleepH=sleepH,SleepQ=sleepQ,
+			EmotionV=emo,EmotionLabel=emo!=null?DataStore.EmotionLabel((int)emo.Value):"",
+			Wx=wxId==0xFFFF?"":GetPool(pool,wxId),Meds=meds,Noise=noise,Note=note};
+	}
+	EmotionEntry ReadEmo(BinaryReader p){
+		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
+		int val=p.ReadSByte(); string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
+		return new EmotionEntry{Id=g.ToString("N"),T=t,Val=val,Note=note};
+	}
+	NoiseEntry ReadNoi(BinaryReader p,Dictionary<int,string> pool){
+		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
+		string tp=GetPool(pool,p.ReadUInt16()); string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
+		return new NoiseEntry{Id=g.ToString("N"),T=t,Type=tp,Note=note};
+	}
+	SleepEntry ReadSleep(BinaryReader p){
+		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
+		float hours=p.ReadSingle(); int q=p.ReadByte(); string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
+		return new SleepEntry{Id=g.ToString("N"),T=t,Hours=hours,Quality=q,Note=note};
+	}
+	MedTakeEntry ReadMedTake(BinaryReader p,Dictionary<int,string> pool){
+		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
+		string med=GetPool(pool,p.ReadUInt16());
+		return new MedTakeEntry{Id=g.ToString("N"),T=t,Med=med};
+	}
 	bool IsBpmn(string path){
 		try{ using(BinaryReader r=new BinaryReader(File.OpenRead(path))) return r.ReadUInt32()==BinMagic; } catch{ return false; }
 	}
@@ -270,7 +315,10 @@ partial class Profile
 		using(MemoryStream ms=new MemoryStream(all))
 		using(BinaryReader r=new BinaryReader(ms)){
 			if(r.ReadUInt32()!=BinMagic) throw new Exception("bad data.bin magic");
-			if(r.ReadByte()!=BinVer) throw new Exception("bad data.bin version");
+			byte ver=r.ReadByte();
+			if(ver==2){ _binGen=0; _hdrSize=5; }// v2 — без поколения: считаем нулевым
+			else if(ver==3){ _binGen=r.ReadInt64(); _hdrSize=13; }// v3 — поколение журнала: компакция Save() повышает, клиенты со старым gen получают reset
+			else throw new Exception("bad data.bin version");
 			try{
 				while(r.BaseStream.Position<r.BaseStream.Length){
 					byte type=r.ReadByte(); int len=r.ReadInt32();
@@ -279,56 +327,33 @@ partial class Profile
 					using(BinaryReader p=new BinaryReader(new MemoryStream(pl))){
 						if(type==RecStr){ int id=p.ReadUInt16(); string sv=p.ReadString(); pool[id]=sv; if(id>=_poolNext) _poolNext=id+1; }
 						else if(type==RecMeas){
-							Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
-							int sys=p.ReadUInt16(),dia=p.ReadUInt16(),pulse=p.ReadUInt16();
-							byte fl=p.ReadByte();
-							float? press=(fl&1)!=0?(float?)p.ReadSingle():null;
-							float? temp=(fl&2)!=0?(float?)p.ReadSingle():null;
-							float? hum=(fl&4)!=0?(float?)p.ReadSingle():null;
-							int? kp=(fl&8)!=0?(int?)p.ReadInt16():null;
-							float? emo=(fl&16)!=0?(float?)p.ReadSByte():null;
-							float? sleepH=(fl&32)!=0?(float?)p.ReadSingle():null;
-							int? sleepQ=(fl&64)!=0?(int?)p.ReadByte():null;
-							int wxId=p.ReadUInt16();
-							int mc=p.ReadByte(); List<string> meds=new List<string>();
-							for(int i2=0;i2<mc;i2++) meds.Add(GetPool(pool,p.ReadUInt16()));
-							int nc=p.ReadByte(); List<string> noise=new List<string>();
-							for(int i2=0;i2<nc;i2++) noise.Add(GetPool(pool,p.ReadUInt16()));
-							string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
-							D.M.RemoveAll(x=>SameId(x.Id,g));
-							D.M.Add(new Measurement{
-								Id=g.ToString("N"),T=t,Sys=sys,Dia=dia,Pulse=pulse,
-								PressMm=press,TempC=temp,Hum=hum,Kp=kp,SleepH=sleepH,SleepQ=sleepQ,
-								EmotionV=emo,EmotionLabel=emo!=null?DataStore.EmotionLabel((int)emo.Value):"",
-								Wx=wxId==0xFFFF?"":GetPool(pool,wxId),Meds=meds,Noise=noise,Note=note});
+							Measurement m=ReadMeas(p,pool);
+							D.M.RemoveAll(x=>x.Id==m.Id);
+							D.M.Add(m);
 						}
 						else if(type==RecMeasDel){ Guid g=new Guid(p.ReadBytes(16)); D.M.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecEmo){
-							Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
-							int val=p.ReadSByte(); string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
-							D.E.RemoveAll(x=>SameId(x.Id,g));
-							D.E.Add(new EmotionEntry{Id=g.ToString("N"),T=t,Val=val,Note=note});
+							EmotionEntry ee=ReadEmo(p);
+							D.E.RemoveAll(x=>x.Id==ee.Id);
+							D.E.Add(ee);
 						}
 						else if(type==RecEmoDel){ Guid g=new Guid(p.ReadBytes(16)); D.E.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecNoi){
-							Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
-							string tp=GetPool(pool,p.ReadUInt16()); string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
-							D.N.RemoveAll(x=>SameId(x.Id,g));
-							D.N.Add(new NoiseEntry{Id=g.ToString("N"),T=t,Type=tp,Note=note});
+							NoiseEntry nn2=ReadNoi(p,pool);
+							D.N.RemoveAll(x=>x.Id==nn2.Id);
+							D.N.Add(nn2);
 						}
 						else if(type==RecNoiDel){ Guid g=new Guid(p.ReadBytes(16)); D.N.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecSleep){
-							Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
-							float hours=p.ReadSingle(); int q=p.ReadByte(); string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
-							D.S.RemoveAll(x=>SameId(x.Id,g));
-							D.S.Add(new SleepEntry{Id=g.ToString("N"),T=t,Hours=hours,Quality=q,Note=note});
+							SleepEntry ss=ReadSleep(p);
+							D.S.RemoveAll(x=>x.Id==ss.Id);
+							D.S.Add(ss);
 						}
 						else if(type==RecSleepDel){ Guid g=new Guid(p.ReadBytes(16)); D.S.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecMedTake){
-							Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
-							string med=GetPool(pool,p.ReadUInt16());
-							D.MedTakes.RemoveAll(x=>SameId(x.Id,g));
-							D.MedTakes.Add(new MedTakeEntry{Id=g.ToString("N"),T=t,Med=med});
+							MedTakeEntry mm2=ReadMedTake(p,pool);
+							D.MedTakes.RemoveAll(x=>x.Id==mm2.Id);
+							D.MedTakes.Add(mm2);
 						}
 						else if(type==RecMedTakeDel){ Guid g=new Guid(p.ReadBytes(16)); D.MedTakes.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecPopup) D.LastPopup=new DateTime(p.ReadInt64());
