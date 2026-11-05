@@ -31,6 +31,7 @@ public class AuthCfg{
 	public string SmtpUser="";// бот bpxor@example.org; пусто = email-фолбэк выключен
 	public string SmtpPass="";
 	public string SmtpFrom="bpxor@example.org";
+	public string WxSource="openmeteo";// "metno" — api.met.no (open-meteo лежит на Hetzner, который режет входящие с некоторых хостинговых ASN)
 }
 
 static class MaddyAuth{

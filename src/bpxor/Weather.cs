@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -24,6 +24,7 @@ partial class Profile
 			case 1:return"малооблачно";
 			case 2:return"переменная облачность";
 			case 3:return"пасмурно";
+			case 4:return"облачно";
 			case 45:
 			case 48:return"туман";
 		}
@@ -42,10 +43,26 @@ partial class Profile
 			url=string.Format(CultureInfo.InvariantCulture,"https://api.open-meteo.com/v1/forecast?latitude={0}&longitude={1}&current=temperature_2m,relative_humidity_2m,pressure_msl,weather_code&hourly=pressure_msl,temperature_2m,relative_humidity_2m,weather_code&timezone=auto&forecast_days=2",
 			Cfg.Lat,Cfg.Lon);
 			string wk=WxCache.Key(Cfg.Lat,Cfg.Lon);// live-погода и hourly-прогноз — общие на округлённые координаты
-			JObject j;
-			if(!WxCache.Try("live:"+wk,WxCache.LiveTtlMin,out j)){
-				j=JObject.Parse(await Http.GetStringAsync(url));
-				WxCache.Put("live:"+wk,j);
+			JObject j=null;
+			if(Program.ACfg.WxSource=="metno"){
+				// met.no locationforecast: без ключа, UTC-время (конвертим в tz юзера), UA с контактом обязателен по политике
+				string mu=string.Format(CultureInfo.InvariantCulture,"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={0:0.0000}&lon={1:0.0000}",Cfg.Lat,Cfg.Lon);
+				if(!WxCache.Try("liveMetno:"+wk,WxCache.LiveTtlMin,out j)){
+					using(var rq=new HttpRequestMessage(HttpMethod.Get,mu)){
+						rq.Headers.UserAgent.ParseAdd("bpxor/1.0 (https://bp.xor.world; contact: admin@example.org)");
+						using(var rp=await Http.SendAsync(rq)){ rp.EnsureSuccessStatusCode(); j=JObject.Parse(await rp.Content.ReadAsStringAsync()); }
+					}
+					WxCache.Put("liveMetno:"+wk,j);
+				}
+				ApplyMetNo(j);
+				j=null;// ниже open-meteo-блок не выполняется
+			}
+			if(j!=null||Program.ACfg.WxSource!="metno"){
+			if(j==null){
+				if(!WxCache.Try("live:"+wk,WxCache.LiveTtlMin,out j)){
+					j=JObject.Parse(await Http.GetStringAsync(url));
+					WxCache.Put("live:"+wk,j);
+				}
 			}
 			Weather.PressMm=(float)((double)j["current"]["pressure_msl"]*0.750062);
 			Weather.TempC=(float)(double)j["current"]["temperature_2m"];
@@ -72,6 +89,7 @@ partial class Profile
 					if(fl.Count>0){ Forecast=fl; ForecastUpdated=DateTime.Now; }
 				}
 			} catch(Exception ex){ Log("Forecast: "+ex.Message); }
+			}
 			try{
 				if(!Http.DefaultRequestHeaders.Contains("User-Agent"))
 					Http.DefaultRequestHeaders.Add("User-Agent",
@@ -147,6 +165,62 @@ partial class Profile
 			MaybePopup("погода");
 			MaybePopupForecast();
 		} catch(Exception ex){ Log("PollWeather: "+ex.Message); } finally{ _weatherBusy=false; }
+	}
+	// symbol_code met.no -> ближайший код WMO (дальше работает общий WmoText)
+	public static int? MetNoWmo(string sym){
+		if(string.IsNullOrEmpty(sym))return null;
+		string s=sym.ToLowerInvariant().Replace("_day","").Replace("_night","");
+		switch(s){
+			case"clearsky":return 0;
+			case"fair":return 1;
+			case"partlycloudy":return 2;
+			case"cloudy":return 4;
+			case"fog":return 45;
+			case"lightrain":return 80;
+			case"rain":return 61;
+			case"heavyrain":return 63;
+			case"lightrainshowers":case"rainshowers":return 80;
+			case"heavyrainshowers":return 82;
+			case"lightrainandthunder":case"rainandthunder":case"heavyrainandthunder":case"thunder":case"thunderstorm":return 95;
+			case"lightsleet":case"sleet":case"heavysleet":return 66;
+			case"lightsnow":return 71;
+			case"snow":return 73;
+			case"heavysnow":return 75;
+			case"lightsnowshowers":case"snowshowers":return 85;
+			case"heavysnowshowers":return 86;
+			default:return null;
+		}
+	}
+	// разбор met.no compact в Weather.* и Forecast (времена мет.службы — UTC, переводим в таймзону юзера)
+	public void ApplyMetNo(JObject m){
+		JArray ts=m["properties"]?["timeseries"] as JArray;
+		if(ts==null||ts.Count==0) throw new Exception("met.no: нет timeseries");
+		JObject first=ts[0] as JObject;
+		JObject inst=first?["data"]?["instant"]?["details"] as JObject;
+		if(inst==null) throw new Exception("met.no: нет instant");
+		Weather.PressMm=(float)((double)inst["air_pressure_at_sea_level"]*0.750062);
+		Weather.TempC=(float)(double)inst["air_temperature"];
+		Weather.Hum=(float)(double)inst["relative_humidity"];
+		string sym=(string)first["data"]?["now"]?["summary"]?["symbol_code"]
+			??(string)first["data"]?["next_1_hours"]?["summary"]?["symbol_code"]??"";
+		int? wc=MetNoWmo(sym); Weather.Text=WmoText(wc??-1);
+		List<WxHour> fl=new List<WxHour>();
+		foreach(JToken e in ts){
+			JObject d=e["data"] as JObject; if(d==null) continue;
+			JObject n1=d["next_1_hours"] as JObject; if(n1==null) continue;// next_6_hours (дальние сутки) для 2-суточного окна не нужны
+			DateTime utc;
+			if(!DateTime.TryParse((string)e["time"],CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal|DateTimeStyles.AdjustToUniversal,out utc)) continue;
+			JObject det=n1["details"] as JObject;
+			fl.Add(new WxHour{
+				T=AlarmScheduler.LocalNow(Cfg.Tz,utc),
+				Press=det!=null?(double?)det["air_pressure_at_sea_level"]:null,
+				Temp=det!=null?(double?)det["air_temperature"]:null,
+				Hum=det!=null?(double?)det["relative_humidity"]:null,
+				Code=MetNoWmo((string)n1["summary"]?["symbol_code"]??"")
+			});
+			if(fl.Count>=48) break;
+		}
+		if(fl.Count>0){ Forecast=fl; ForecastUpdated=DateTime.Now; }
 	}
 	// fire-and-forget для таймера/Snapshot: все исключения уже логируются внутри PollWeatherAsync
 	public void PollWeather(){ _=PollWeatherAsync(); }

@@ -445,6 +445,25 @@ partial class Profile
 			if(VapidKeys.PublicKey!=pub) throw new Exception("ключи не персистятся");
 			Directory.Delete(dir,true);
 		});
+		check("Погода: парсер met.no (ApplyMetNo/MetNoWmo)",()=>{
+			string fx="{\"properties\":{\"timeseries\":["
+				+"{\"time\":\"2026-11-05T13:00:00Z\",\"data\":{\"instant\":{\"details\":{\"air_pressure_at_sea_level\":1000.2,\"air_temperature\":0.5,\"relative_humidity\":88}},\"now\":{\"summary\":{\"symbol_code\":\"partlycloudy_day\"}},\"next_1_hours\":{\"summary\":{\"symbol_code\":\"lightrain\"},\"details\":{\"air_pressure_at_sea_level\":1000.0,\"air_temperature\":0.4,\"relative_humidity\":90}}}},"
+				+"{\"time\":\"2026-11-05T14:00:00Z\",\"data\":{\"instant\":{\"details\":{\"air_pressure_at_sea_level\":999.8,\"air_temperature\":0.3,\"relative_humidity\":91}},\"next_1_hours\":{\"summary\":{\"symbol_code\":\"snow\"},\"details\":{\"air_pressure_at_sea_level\":999.5,\"air_temperature\":0.1,\"relative_humidity\":92}}}},"
+				+"{\"time\":\"2026-11-05T15:00:00Z\",\"data\":{\"instant\":{\"details\":{\"air_pressure_at_sea_level\":999.0,\"air_temperature\":0.0,\"relative_humidity\":93}},\"next_6_hours\":{\"summary\":{\"symbol_code\":\"cloudy\"}}}}"
+				+"]}}";
+			string savedTz=Cfg.Tz; Cfg.Tz="UTC"; Forecast=new List<WxHour>();
+			try{
+				ApplyMetNo(JObject.Parse(fx));
+				if(Math.Abs(Weather.PressMm.Value-1000.2*0.750062f)>0.01f) throw new Exception("PressMm="+(object)Weather.PressMm);
+				if(string.IsNullOrEmpty(Weather.Text)) throw new Exception("Text пустой");
+				if(Forecast.Count!=2) throw new Exception("Forecast.Count="+Forecast.Count+" (next_6_hours не входит)");
+				if(Forecast[0].Code!=80||Forecast[1].Code!=73) throw new Exception("коды: "+Forecast[0].Code+","+Forecast[1].Code);
+				if(Forecast[0].T.Hour!=13) throw new Exception("час локальный: "+Forecast[0].T);
+				if(Math.Abs((double)Forecast[0].Press-1000.0)>0.001) throw new Exception("Press hourly");
+				if(WmoText(4)=="неизвестно") throw new Exception("WmoText(4) не покрыт");
+			if(MetNoWmo("heavyrainshowers_night")!=82||MetNoWmo("clearsky_day")!=0||MetNoWmo("нет_такого")!=null) throw new Exception("MetNoWmo маппинг");
+			} finally{ Cfg.Tz=savedTz; }
+		});
 		check("F1/F2: PWA-статика на месте (q.html, манифест, иконки)",()=>{
 			string bin=AppContext.BaseDirectory;// ExeDir тут — временная песочница selftest, а не каталог бинаря
 			foreach(string f in new string[]{"q.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"})
