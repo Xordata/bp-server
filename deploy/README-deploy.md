@@ -26,10 +26,33 @@ nginx -t && systemctl reload nginx
 certbot --nginx -d bp.xor.world --redirect
 ```
 
-## 4. fail2ban (файл fail2ban-bpxor.conf — два фрагмента, пути в комментарии)
+## 4. fail2ban (бывший fail2ban-bpxor.conf — два файла, содержимое ниже целиком)
 ```bash
-# filter.d/bpxor-login.conf + jail.d/bpxor.conf
-fail2ban-client reload && fail2ban-client status bp-login
+# лог-файл должен существовать до старта jail, иначе fail2ban его не подхватит
+touch /var/log/nginx/bp.access.log && chown www-data:adm /var/log/nginx/bp.access.log
+
+cat > /etc/fail2ban/filter.d/bpxor-login.conf <<'EOF'
+# Ловим ТОЛЬКО неверные логины (POST /api/login -> 401); 401 от /api/* при
+# истёкшей сессии легального пользователя банить НЕ должны.
+[Definition]
+failregex = ^<HOST> - \S+ \[[^\]]+\] "POST /api/login[^"]*" 401 
+ignoreregex =
+EOF
+
+cat > /etc/fail2ban/jail.d/bpxor.conf <<'EOF'
+[bp-login]
+enabled  = true
+filter   = bpxor-login
+logpath  = /var/log/nginx/bp.access.log
+maxretry = 5
+findtime = 60
+bantime  = 3600
+banaction = iptables-multiport
+action = %(banaction)s[name=%(__name__)s, bantime="%(bantime)s", port="80,443", protocol="tcp", chain="%(chain)s"]
+EOF
+
+fail2ban-client reload
+fail2ban-client status bp-login    # должен показать Filter/Log file и 0 bans
 ```
 
 ## 5. Бэкап (файл backup-bpdata.sh)
