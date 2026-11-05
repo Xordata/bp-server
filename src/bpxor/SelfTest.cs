@@ -530,6 +530,63 @@ partial class Profile
 			if((string)mf["shortcuts"]?[0]?["url"]!="/q") throw new Exception("shortcut /q не в манифесте");
 			if(!File.Exists(Path.Combine(bin,"alarm.mp3"))) throw new Exception("alarm.mp3 не рядом с бинарём");
 		});
+		check("Sync: API-токены (создание/проверка/отзыв/персист)",()=>{
+			string dir=Path.Combine(ExeDir,"tok");
+			Directory.CreateDirectory(dir);
+			ApiTokens.Init(dir);
+			var t=ApiTokens.Create("u1@test","ПК дома");
+			if(string.IsNullOrEmpty(t.Token)||!t.Token.Contains(".")) throw new Exception("некорректный токен");
+			if(ApiTokens.Resolve(t.Token)!="u1@test") throw new Exception("токен не резолвится");
+			if(ApiTokens.Resolve(t.Token+"x")!=null) throw new Exception("подделанный токен не должен резолвиться");
+			if(ApiTokens.Resolve("нет-такого")!=null) throw new Exception("мусор не должен резолвиться");
+			if(ApiTokens.List("u1@test").Count!=1) throw new Exception("список не тот");
+			ApiTokens.Init(dir);// перечитка с диска: хранится хэш, не токен
+			if(ApiTokens.Resolve(t.Token)!="u1@test") throw new Exception("токен потерян после перечитки");
+			if(!ApiTokens.Revoke("u1@test",t.Id)) throw new Exception("отзыв не сработал");
+			if(ApiTokens.Resolve(t.Token)!=null) throw new Exception("отозванный токен резолвится");
+			if(ApiTokens.Revoke("other@u",t.Id)) throw new Exception("чужой токен отозван");
+		});
+		check("Sync: push/pull дельта (LWW, echo, тумстоуны, cfg)",()=>{
+			string dir=Path.Combine(ExeDir,"sync");
+			Directory.CreateDirectory(dir);
+			Profile s=new Profile(dir); s.Load();
+			string id=Guid.NewGuid().ToString("N");
+			string m1="{\"k\":\"meas\",\"Id\":\""+id+"\",\"T\":\"2026-11-01T09:00:00\",\"Sys\":120,\"Dia\":80,\"Pulse\":70,\"Note\":\"\"}";
+			JObject r1=s.SyncPush(JObject.Parse("{\"recs\":["+m1+"]}"));
+			if((int)r1["applied"]!=1) throw new Exception("первый push: applied="+(int)r1["applied"]);
+			if(s.D.M.Count(x=>x.Id==id)!=1) throw new Exception("запись не применена");
+			long seq1=(long)r1["seq"];
+			JObject r2=s.SyncPush(JObject.Parse("{\"recs\":["+m1+"]}"));// echo — то же содержимое
+			if((int)r2["applied"]!=0||(int)r2["skipped"]!=1) throw new Exception("echo не подавлен: "+r2.ToString(Newtonsoft.Json.Formatting.None));
+			if((long)r2["seq"]!=seq1) throw new Exception("echo нарос в журнале");
+			string m1b=m1.Replace("\"Sys\":120","\"Sys\":141");
+			JObject r3=s.SyncPush(JObject.Parse("{\"recs\":["+m1b+"]}"));
+			if((int)r3["applied"]!=1||s.D.M.First(x=>x.Id==id).Sys!=141) throw new Exception("LWW-правка не сработала");
+			JObject pl=s.SyncPull(0,s.BinGen,0);// с начала журнала
+			if(pl["reset"]!=null) throw new Exception("pull на пустом курсоре не должен reset");
+			// журнал append-only: pull с начала несёт обе версии (120->141), клиент применяет по порядку — LWW
+			if(pl["meas"]==null||((JArray)pl["meas"]).Count!=2) throw new Exception("pull не вернул записи: "+pl.ToString(Newtonsoft.Json.Formatting.None));
+			JArray measArr=(JArray)pl["meas"];
+			if(measArr[0]["Id"].ToString()!=id||measArr[1]["Id"].ToString()!=id) throw new Exception("pull не тот Id");
+			if((int)measArr[0]["Sys"]!=120||(int)measArr[1]["Sys"]!=141) throw new Exception("pull не тот порядок версий (LWW)");
+			JObject pl2=s.SyncPull((long)pl["seq"],s.BinGen,(long)pl["cfgRev"]);
+			if(pl2["meas"]!=null) throw new Exception("pull с текущего курсора вернул лишнее");
+			if(s.SyncPull(0,s.BinGen+7,0)["reset"]==null) throw new Exception("чужое поколение должно reset");
+			JObject r4=s.SyncPush(JObject.Parse("{\"recs\":[{\"k\":\"measDel\",\"Id\":\""+id+"\"}]}"));
+			if((int)r4["applied"]!=1||s.D.M.Any(x=>x.Id==id)) throw new Exception("тумстоун не применён");
+			JObject r5=s.SyncPush(JObject.Parse("{\"recs\":[{\"k\":\"measDel\",\"Id\":\""+id+"\"}]}"));
+			if((int)r5["applied"]!=0) throw new Exception("echo тумстоуна не подавлен");
+			JObject pl3=s.SyncPull((long)pl["seq"],s.BinGen,(long)pl["cfgRev"]);
+			if(pl3["measDel"]==null||((JArray)pl3["measDel"]).Count!=1) throw new Exception("pull не вернул тумстоун");
+			Profile s2=new Profile(dir); s2.Load();// журнал пережил рестарт, удаление не «воскресло»
+			if(s2.D.M.Any(x=>x.Id==id)) throw new Exception("удалённая запись воскресла после перезагрузки");
+			if(!s2._dead.Contains(id)) throw new Exception("_dead не собрался из журнала");
+			JObject r6=s.SyncPush(JObject.Parse("{\"recs\":[],\"cfg\":{\"NormSys\":140}}"));
+			if(s.Cfg.NormSys!=140) throw new Exception("cfg не применён");
+			JObject pl4=s.SyncPull((long)pl3["seq"],s.BinGen,0);
+			if(pl4["cfg"]==null||(int)pl4["cfg"]["NormSys"]!=140) throw new Exception("pull не вернул cfg по ревизии");
+			Directory.Delete(dir,true);
+		});
 		Thread.CurrentThread.CurrentCulture=savedCulture;
 		Console.WriteLine(failed==0?"SELFTEST OK":"SELFTEST FAILED: "+failed);
 		return failed;

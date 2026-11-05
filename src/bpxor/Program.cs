@@ -38,7 +38,7 @@ static class Program{
 		string cfgPath=Path.Combine(AppContext.BaseDirectory,"bpxor.config.json");
 		if(File.Exists(cfgPath)){ try{ JsonConvert.PopulateObject(File.ReadAllText(cfgPath),ACfg); }catch(Exception ex){ Console.WriteLine("config: "+ex.Message); } }
 		UserStore.Root=dataRoot; UserStore.Cfg=ACfg; Sessions.Init(dataRoot);
-		ACfg.DataRoot=dataRoot; VapidKeys.Init(dataRoot); PushStore.Init(dataRoot); AlarmScheduler.DataRoot=dataRoot;
+		ACfg.DataRoot=dataRoot; VapidKeys.Init(dataRoot); PushStore.Init(dataRoot); AlarmScheduler.DataRoot=dataRoot; ApiTokens.Init(dataRoot);
 		JobGate.Max=Math.Max(1,ACfg.MaxConcurrentJobs);
 
 		var builder=Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder(new string[0]);
@@ -71,6 +71,22 @@ static class Program{
 		if(req.Method=="GET"&&path=="/favicon.ico"){ await ServeStaticBin(ctx,"icons/icon-192.png","image/png"); return; }
 		if(req.Method=="GET"&&path.StartsWith("/icons/")&&System.Text.RegularExpressions.Regex.IsMatch(path,"^/icons/[a-z0-9-]+[.]png$")){ await ServeStaticBin(ctx,path.Substring(1),"image/png"); return; }
 		if(path=="/logout"){ string t0=GetCookie(req,CookieSid); if(t0!=null) Sessions.Destroy(t0); DelCookie(ctx,CookieSid); DelCookie(ctx,CookieCsrf); ctx.Response.Redirect("/login"); return; }
+		// ---- персональный API-токен (синхронизация десктопа, Фаза 7) ----
+		if(path.StartsWith("/api/sync/")){
+			string auth=(string)req.Headers["Authorization"]??"";
+			string tok=auth.StartsWith("Bearer ",StringComparison.OrdinalIgnoreCase)?auth.Substring(7).Trim():"";
+			string ip=ctx.Connection.RemoteIpAddress?.ToString()??"?";
+			// бэкофф по (ip, id-токена): перебор одного токена не блокирует легальные токены того же ip
+			string rl="tok|"+ip+"|"+(tok.Contains('.')?tok.Substring(0,tok.IndexOf('.')):tok);
+			if(!RateLimit.Allow(rl,ACfg.FailDelaySec)){ ctx.Response.StatusCode=429; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"слишком много попыток\"}"); return; }
+			string uid=ApiTokens.Resolve(tok);
+			if(uid==null){ RateLimit.Fail(rl,ACfg.FailDelaySec); ctx.Response.StatusCode=401; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"неверный токен\"}"); return; }
+			RateLimit.Ok(rl);
+			Profile pt=UserStore.GetOrCreate(uid);
+			if(pt==null){ ctx.Response.StatusCode=403; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"достигнут лимит пользователей сервера\"}"); return; }
+			ctx.Items["profile"]=pt; ctx.Items["uid"]=uid; ctx.Items["tokenauth"]=true;// CSRF не нужен: токен в заголовке, cookie не участвует
+			await next(); return;
+		}
 		// ---- сессия ----
 		var s=Sessions.Resolve(GetCookie(req,CookieSid));
 		bool isApi=path.StartsWith("/api/");
@@ -83,7 +99,7 @@ static class Program{
 		if(p==null){ ctx.Response.StatusCode=403; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"достигнут лимит пользователей сервера\"}"); return; }
 		ctx.Items["profile"]=p; ctx.Items["uid"]=s.Uid;
 		// ---- CSRF на мутающих запросах (double-submit: cookie == заголовок) ----
-		if(req.Method=="POST"&&isApi&&path!="/api/alarm/dismiss"){
+		if(req.Method=="POST"&&isApi&&path!="/api/alarm/dismiss"&&ctx.Items["tokenauth"]==null){
 			string ck=GetCookie(req,CookieCsrf),hd=req.Headers["X-CSRF"];
 			if(string.IsNullOrEmpty(ck)||hd!=ck){ ctx.Response.StatusCode=403; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"csrf\"}"); return; }
 		}

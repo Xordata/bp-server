@@ -329,6 +329,22 @@ static class HttpApi{
 			pr.PublishChange();
 			await Json(new{ok=true,dismissed=st.DismissedKey}).ExecuteAsync(ctx);
 		});
+
+		// ---------- Фаза 7: синхронизация десктоп<->веб ----------
+		// Управление устройствами — через сессию (обычный путь с CSRF)
+		app.MapMethods("/api/devices",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Json(new{items=ApiTokens.List(P(ctx).Uid)}));
+		app.MapPost("/api/devices/create",ctx=>Post(ctx,(p,jo,body)=>{
+			var t=ApiTokens.Create(p.Uid,(string)jo["name"]);
+			return Json(new{ok=true,id=t.Id,token=t.Token});
+		}));
+		app.MapPost("/api/devices/revoke",ctx=>Post(ctx,(p,jo,body)=>Json(new{ok=ApiTokens.Revoke(p.Uid,(string)jo["id"])})));
+		// Транспорт синхронизации — Authorization: Bearer <токен>; профиль и снятие CSRF — в AuthGate
+		app.MapPost("/api/sync/push",ctx=>Post(ctx,(p,jo,body)=>Json(p.SyncPush(jo))));
+		app.MapMethods("/api/sync/pull",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>{
+			Profile pr=P(ctx);
+			long Ql(string k){ long v; return long.TryParse((string)ctx.Request.Query[k],out v)?v:-1; }
+			return Json(pr.SyncPull(Ql("since"),Ql("gen"),Ql("cfgRev")));
+		})());
 	}
 
 	static IResult StaticText(HttpContext ctx,string fname,string ctype){

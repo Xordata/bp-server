@@ -257,7 +257,7 @@ partial class Profile
 	public void AppendNoise(NoiseEntry n2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecNoi,NoiPayload(n2,PoolWriter(w))); } catch{} } }
 	public void AppendSleep(SleepEntry s2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecSleep,SleepPayload(s2,PoolWriter(w))); } catch{} } }
 	public void AppendMedTake(MedTakeEntry mt){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMedTake,MedTakePayload(mt,PoolWriter(w))); } catch{} } }
-	public void AppendGuidRec(byte type,string id){ Guid g; if(Guid.TryParse(id,out g)) AppendRec(type,RecPayload(w=>w.Write(g.ToByteArray()))); }
+	public void AppendGuidRec(byte type,string id){ Guid g; if(Guid.TryParse(id,out g)){ if(type==RecMeasDel||type==RecEmoDel||type==RecNoiDel||type==RecSleepDel||type==RecMedTakeDel) _dead.Add(g.ToString("N")); AppendRec(type,RecPayload(w=>w.Write(g.ToByteArray()))); } }
 	void AppendPopup(){ if(D.LastPopup!=null) AppendRec(RecPopup,RecPayload(w=>w.Write(D.LastPopup.Value.Ticks))); }
 	bool SameId(string id,Guid g){ Guid g2; return Guid.TryParse(id,out g2)&&g2==g; }
 	string GetPool(Dictionary<int,string> pool,int id){ string s3; return pool.TryGetValue(id,out s3)?s3:""; }
@@ -331,31 +331,31 @@ partial class Profile
 							D.M.RemoveAll(x=>x.Id==m.Id);
 							D.M.Add(m);
 						}
-						else if(type==RecMeasDel){ Guid g=new Guid(p.ReadBytes(16)); D.M.RemoveAll(x=>SameId(x.Id,g)); }
+						else if(type==RecMeasDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.M.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecEmo){
 							EmotionEntry ee=ReadEmo(p);
 							D.E.RemoveAll(x=>x.Id==ee.Id);
 							D.E.Add(ee);
 						}
-						else if(type==RecEmoDel){ Guid g=new Guid(p.ReadBytes(16)); D.E.RemoveAll(x=>SameId(x.Id,g)); }
+						else if(type==RecEmoDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.E.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecNoi){
 							NoiseEntry nn2=ReadNoi(p,pool);
 							D.N.RemoveAll(x=>x.Id==nn2.Id);
 							D.N.Add(nn2);
 						}
-						else if(type==RecNoiDel){ Guid g=new Guid(p.ReadBytes(16)); D.N.RemoveAll(x=>SameId(x.Id,g)); }
+						else if(type==RecNoiDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.N.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecSleep){
 							SleepEntry ss=ReadSleep(p);
 							D.S.RemoveAll(x=>x.Id==ss.Id);
 							D.S.Add(ss);
 						}
-						else if(type==RecSleepDel){ Guid g=new Guid(p.ReadBytes(16)); D.S.RemoveAll(x=>SameId(x.Id,g)); }
+						else if(type==RecSleepDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.S.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecMedTake){
 							MedTakeEntry mm2=ReadMedTake(p,pool);
 							D.MedTakes.RemoveAll(x=>x.Id==mm2.Id);
 							D.MedTakes.Add(mm2);
 						}
-						else if(type==RecMedTakeDel){ Guid g=new Guid(p.ReadBytes(16)); D.MedTakes.RemoveAll(x=>SameId(x.Id,g)); }
+						else if(type==RecMedTakeDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.MedTakes.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecPopup) D.LastPopup=new DateTime(p.ReadInt64());
 						// неизвестный тип — пропущен (задел на будущее)
 					}

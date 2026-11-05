@@ -343,6 +343,16 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
       <p class="mut" style="margin:6px 0 0">Новый размер слоя применится после «Сбросить модель» (вкладка «Модель»).</p>
     </section>
     <section>
+      <h3>Устройства (синхронизация с десктопом)</h3>
+      <div class="grid">
+        <input id="dev-name" placeholder="имя устройства, напр. «ПК дома»" style="width:200px">
+        <button onclick="devCreate()" title="персональный API-токен для синхронизации BPMonitor; показывается один раз">Создать токен</button>
+      </div>
+      <div id="dev-token" class="mut" style="margin-top:6px;word-break:break-all"></div>
+      <div style="margin-top:8px"><table id="dev-t"><thead><tr><th>Имя</th><th>Создан</th><th>Последнее исп.</th><th></th></tr></thead><tbody></tbody></table></div>
+      <p class="mut" style="margin:6px 0 0">Токен показывается один раз и на сервере не хранится (только его хэш). Отзыв мгновенно отключает устройство.</p>
+    </section>
+    <section>
       <h3>Перенос на другой ПК</h3>
       <div class="grid">
         <button onclick="exportAll()" title="единый JSON: настройки + все данные + модель + справочник ФК">⬇ Экспорт всего</button>
@@ -1016,7 +1026,23 @@ function fillCfg(){
   $("c-lr").value=c.Nn.Lr;$("c-hid").value=c.Nn.Hidden;$("c-hid2").value=c.Nn.Hidden2;$("c-ep").value=c.Nn.Epochs;
   const miss=S.wxMissing!=null?S.wxMissing:(S.measurements||[]).filter(m=>m.PressMm==null||m.TempC==null||m.Hum==null||m.Kp==null).length;
   $("c-wxb").textContent=miss?("Заполнить погоду ("+miss+")"):"Погода заполнена ✓";
+  devList();
 }
+function devList(){
+  const tb=document.querySelector("#dev-t tbody");if(!tb)return;
+  fetch("/api/devices").then(r=>r.json()).then(j=>{
+    const it=j.items||[];
+    tb.innerHTML=it.length?it.map(d=>`<tr><td>${esc(d.name)}</td><td>${esc(d.created)}</td><td>${d.lastUsed?esc(d.lastUsed):"—"}</td><td><button onclick="devRevoke('${d.id}')">Отозвать</button></td></tr>`).join(""):'<tr><td colspan="4" class="mut">токенов нет</td></tr>';
+  }).catch(()=>{});
+}
+async function devCreate(){
+  const j=await apiPost("/api/devices/create",{name:$("dev-name").value.trim()});
+  if(j.ok){$("dev-name").value="";
+    $("dev-token").innerHTML="🔑 Токен (показывается один раз, сохраните его): <code>"+esc(j.token)+"</code> <button onclick=\"navigator.clipboard.writeText(&quot;"+j.token+"&quot;)\">Копировать</button>";
+    devList();
+  }else flash(j.err||"Ошибка",false);
+}
+async function devRevoke(id){const j=await apiPost("/api/devices/revoke",{id});flash(j.ok?"Отозвано":"Ошибка",!!j.ok);devList();}
 function toggleAuto(on){
   apiPost("/api/autostart",{on:on}).then(j=>{
     flash(j.ok?(on?"Автозапуск: включён":"Автозапуск: выключен"):(j.err||"Ошибка"),!!j.ok);
