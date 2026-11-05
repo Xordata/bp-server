@@ -154,11 +154,15 @@ server {
 - [ ] cron: бэкап /opt/bpdata 03:30
 - [x] .NET 8 runtime не нужен — self-contained linux-x64; glibc 2.36 ✓
 
-### Фаза 1 — каркас (порт)
-- [ ] `dotnet new web` (.NET 8), перенос BpMonitor.cs по модулям: Models / Storage / Neural / Weather / MedPk / Http (Kestrel-контроллеры вместо Handle(ctx))
-- [ ] Убрать WinForms/NAudio/HttpListener; конфиг-апп через appsettings
-- [ ] SPA: заменить origin-логику, добавить экран логина
-- [ ] CI-подобный скрипт: build self-contained linux-x64, scp, systemctl restart
+### Фаза 1 — каркас (порт) — **ГОТОВО 2026-11-05**
+- [x] `dotnet new web` (.NET 8), перенос BpMonitor.cs по модулям: Models / Core / Storage / Neural / Weather / MedPk(в Neural) / Alarms / Export / State / HttpApi / SelfTest (U:\AISess\bp.xor.world\src\bpxor)
+- [x] Убраны WinForms/NAudio/HttpListener/реестр; Notify-сток (лог) вместо балюнов; StartAlarm/StopAlarm — стубы (звук в браузере, Фаза 4)
+- [x] `--data <dir>` = каталог профиля (config.json/data.bin/nn.bin/medpk.json/backups/logs), index.html+alarm.mp3 рядом с бинарём
+- [x] Перенесённый selftest: **15/15 PASS** на net8
+- [x] Смоук живого сервера: GET / (60КБ SPA), state/version/job, POST measurement/config/emotion/sleep/medtake/nn.train, job backfill, export doctor CSV, export/all ↔ import/all round-trip, storage/compact, bad-json обработка
+- [x] SPA правок не требует (42 вызова API — только относительные пути)
+- [x] `dotnet publish -r linux-x64 --self-contained` → U:\AISess\bp.xor.world\publish\linux-x64 (97 МБ)
+- [ ] CI-подобный скрипт: scp + systemctl restart (сделаем при первом деплое)
 
 ### Фаза 2 — авторизация и мультипользовательскость
 - [ ] IMAP LOGIN probe (класс `MaddyAuth`), нормализация логина, ограничение домена `@xor.world`
