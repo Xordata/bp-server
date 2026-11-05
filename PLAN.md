@@ -150,7 +150,7 @@ server {
 - [x] DNS A `bp.xor.world` → <VPS-IP> — распространение подтверждено (1.1.1.1, 8.8.8.8)
 - [x] Сертификат выпущен 2026-11-05: `certbot --nginx -d bp.xor.world --redirect` — https работает, 301 с http, продление авто (expires 2027-02-03); vhost bp.xor.world в sites-enabled, brotli/gzip/limit_req на месте
 - [ ] nginx vhost — **сделано** (см. выше); fail2ban jail на 401 — ещё нет (deploy/fail2ban-bpxor.conf)
-- [ ] Бот-аккаунт `bpxor@example.org` для email-фолбэка (maddy_add_mbox.sh), пароль → appsettings 0600
+- [x] Бот-аккаунт `bpxor@example.org` для email-фолбэка — создан 2026-11-05 (подтверждён списком ящиков maddy); пароль в `U:\AISess\secrets\bpxor.config.json` (вне репо), при деплое → `bpxor.config.json` рядом с бинарём, chmod 600. С dev-машины AUTH не проверить (файрвол: TCP принимает, данных нет) — проверить с сервера при деплое
 - [ ] cron: бэкап /opt/bpdata 03:30
 - [x] .NET 8 runtime не нужен — self-contained linux-x64; glibc 2.36 ✓
 

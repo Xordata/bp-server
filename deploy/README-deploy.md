@@ -4,6 +4,7 @@
 - [x] swap 2G + fstab
 - [x] brotli-модули nginx
 - [x] DNS bp.xor.world → <VPS-IP> (проверено через 1.1.1.1/8.8.8.8)
+- [x] бот-аккаунт bpxor@example.org создан в maddy (пароль в U:\AISess\secrets\bpxor.config.json — вне репо)
 - [ ] шаги ниже
 
 ## 1. Пользователь и каталог данных
@@ -37,14 +38,17 @@ install -m 755 backup-bpdata.sh /usr/local/bin/
 ( crontab -l; echo '30 3 * * * /usr/local/bin/backup-bpdata.sh' ) | crontab -
 ```
 
-## 6. Бот-аккаунт для писем-будильников
+## 6. Бот-аккаунт для писем-будильников — СДЕЛАНО 2026-11-05
 ```bash
-/root/maddy_add_mbox.sh   # → bpxor@example.org, пароль записать в /etc/bpxor/appsettings.json (chmod 600)
+# bpxor@example.org уже создан; пароль лежит в U:\AISess\secrets\bpxor.config.json (dev-машина).
+# Проверить AUTH с самого сервера (снаружи порты maddy не доступны):
+#   openssl s_client -connect 127.0.0.1:587 -starttls smtp  → AUTH LOGIN (base64 логина/пароля)
 ```
 
-## 7. Приложение (после Фазы 1–3, когда будет бинарь)
+## 7. Приложение (бинарь готов: publish/linux-x64, Фаза 4)
 ```bash
-# bpxor (self-contained linux-x64) → /usr/local/bin/bpxor/, chmod +x, chown -R bpxor:bpxor
+# bpxor (self-contained linux-x64) + index.html + login.html + sw.js + alarm.mp3 → /usr/local/bin/bpxor/, chmod +x, chown -R bpxor:bpxor
+# bpxor.config.json (из U:\AISess\secrets\) → /usr/local/bin/bpxor/bpxor.config.json, chmod 600, chown bpxor:bpxor
 # bpxor.service → /etc/systemd/system/
 systemctl daemon-reload && systemctl enable --now bpxor
 systemctl status bpxor --no-pager
