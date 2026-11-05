@@ -3,20 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2f5d8a">
 <link rel="icon" type="image/png" href="/icons/icon-192.png">
 <title>Дневник АД — вход</title>
 <style>
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#14161a;color:#e8eaf0;font-family:system-ui,Arial,sans-serif}
-.card{background:#1d2026;border:1px solid #2c313a;border-radius:14px;padding:34px 30px;width:320px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-h1{font-size:19px;margin:0 0 4px}
-.sub{color:#8a93a6;font-size:12.5px;margin-bottom:22px}
-label{display:block;font-size:12.5px;color:#9aa3b5;margin:12px 0 4px}
-input{width:100%;box-sizing:border-box;background:#12141a;border:1px solid #333a46;border-radius:8px;color:#e8eaf0;padding:10px 12px;font-size:15px}
-input:focus{outline:none;border-color:#4d7fff}
-button{width:100%;margin-top:22px;padding:11px;border:none;border-radius:8px;background:#3b6ef5;color:#fff;font-size:15px;cursor:pointer}
-button:hover{background:#4d7fff}
-button:disabled{background:#3a4152;cursor:wait}
-.err{color:#ff7a7a;font-size:13px;margin-top:14px;min-height:18px}
+:root{color-scheme:light;--bg:#f6f6f3;--fg:#222;--card:#fff;--bd:#c9c9c4;--mut:#777;--accent:#2f5d8a;--accent-h:#27507a;--warn:#b71c1c}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#14161a;--fg:#e8eaf0;--card:#1d2026;--bd:#3a3f48;--mut:#9aa3b5;--accent:#4a7fb5;--accent-h:#5d92c9;--warn:#ff8a80}}
+*{box-sizing:border-box}
+body{font:13px/1.45 Tahoma,Verdana,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:28px 26px;width:320px;box-shadow:0 10px 40px rgba(0,0,0,.18)}
+h1{font-size:18px;margin:0 0 4px}
+.sub{color:var(--mut);font-size:12.5px;margin-bottom:20px}
+label{display:block;font-size:12.5px;color:var(--mut);margin:12px 0 4px}
+input{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:3px;color:var(--fg);padding:7px 8px;font:inherit}
+input:focus{outline:none;border-color:var(--accent)}
+button{width:100%;margin-top:20px;padding:8px;border:1px solid var(--accent);border-radius:3px;background:var(--accent);color:#fff;font:inherit;font-size:14px;cursor:pointer}
+button:hover{background:var(--accent-h)}
+button:disabled{opacity:.6;cursor:wait}
+.err{color:var(--warn);font-size:13px;margin-top:14px;min-height:18px}
 </style>
 </head>
 <body>
@@ -33,6 +37,9 @@ button:disabled{background:#3a4152;cursor:wait}
 </form>
 </div>
 <script>
+var mq=matchMedia('(prefers-color-scheme:dark)');
+(function up(){var m=document.querySelector('meta[name=theme-color]');if(m)m.content=mq.matches?'#14161a':'#2f5d8a';})();
+if(mq.addEventListener)mq.addEventListener('change',function(){var m=document.querySelector('meta[name=theme-color]');if(m)m.content=mq.matches?'#14161a':'#2f5d8a';});
 document.getElementById('f').onsubmit=async ev=>{
  ev.preventDefault();
  const b=document.getElementById('b'),e=document.getElementById('e');
