@@ -66,7 +66,8 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
   <b>🩺 Дневник давления</b>
   <div class="wx" id="wx"></div>
   <span id="pred" title="Прогноз личной модели">модель: —</span>
-  <button onclick="apiPost('/api/alarm/stop').then(()=>flash('Звук остановлен'))" title="Остановить будильник">⏹ звук</button>
+  <button onclick="stopRing(true);flash('Звук остановлен')" title="Остановить звук вкладки">⏹ звук</button>
+  <button id="ring-stop" style="display:none;background:#b71c1c;border-color:#b71c1c;color:#fff" onclick="stopRing(true)">⏹ Стоп будильника</button>
   <span style="flex:1"></span>
   <button onclick="loadState()" title="Обновить">⟳</button>
 </header>
@@ -218,8 +219,8 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
         <label>Файл звука (рядом с exe) <input id="a-file" style="width:160px"></label>
         <label>Напоминать, мин до <input type="number" id="a-ahead" style="width:56px"></label>
         <button class="primary" onclick="saveAlarmsCommon()">Сохранить</button>
-        <button onclick="apiPost('/api/alarm/test').then(()=>flash('Воспроизводится тест'))">▶ Тест звука</button>
-        <button onclick="apiPost('/api/alarm/stop').then(()=>flash('Звук остановлен'))">⏹ Стоп</button>
+        <button onclick="testRing()">▶ Тест звука</button>
+        <button onclick="stopRing(true)">⏹ Стоп</button>
       </div>
       <div style="margin-top:10px" class="grid">
         <label>Время <input type="time" id="a-time" style="width:96px"></label>
@@ -234,7 +235,19 @@ canvas{max-width:100%;border:1px solid var(--bd);background:#fff}
         <button class="primary" onclick="addAlarm()">Добавить будильник</button>
       </div>
       <div style="margin-top:8px"><table id="al-t"><thead><tr><th>Время</th><th>Подпись</th><th>Расписание</th><th>Вкл</th><th></th></tr></thead><tbody></tbody></table></div>
-      <p class="mut" style="margin:6px 0 0">Левый клик по значку в трее останавливает звенящий будильник; если будильник не звенит — открывает этот интерфейс.</p>
+      <p class="mut" style="margin:6px 0 0">При открытой вкладке будильник звенит alarm.mp3 прямо здесь (кнопка «⏹ Стоп» гасит и на сервере). Тест звука играет в браузере.</p>
+    </section>
+    <section>
+      <h3>Уведомления</h3>
+      <div class="grid">
+        <button id="push-btn" onclick="pushToggle()">🔔 Включить push-уведомления</button>
+        <span id="push-state" class="mut"></span>
+      </div>
+      <div class="grid" style="margin-top:6px">
+        <label><input type="checkbox" id="a-email" onchange="toggleEmailAl(this.checked)"> Дублировать письмом, если push не доставлен</label>
+        <span class="mut">адрес: <span id="a-emailto">—</span></span>
+      </div>
+      <p class="mut" style="margin:6px 0 0">Push приходит даже с закрытой вкладкой (звук — системный, кастомный mp3 браузер в фоне воспроизвести не может). На iPhone — только если «Дневник» добавлен на домашний экран. Таймзона сервера: <span id="a-tz">—</span> (сообщается браузером автоматически).</p>
     </section>
   </div>
 
@@ -422,8 +435,10 @@ function renderActive(){
 }
 
 /* ---------- состояние ---------- */
+let tzSent=false;
 async function loadState(){
   try{S=await (await fetch("/api/state")).json();}catch(e){return;}
+  if(!tzSent&&S.cfg){tzSent=true;try{const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.cfg.Tz!==tz)apiPost("/api/config",{Tz:tz});}catch(e){}}
   renderHeader();
   if(act!=="cfg")renderActive(); // не затираем форму настроек во время ввода
 }
@@ -819,6 +834,7 @@ function renderAlarms(){
     `<td><input type="checkbox" ${a.Enabled?"checked":""} onchange="toggleAl(${i},this.checked)"></td>`+
     `<td><button onclick="delAl(${i})">✕</button></td></tr>`
   ).join("")||'<tr><td colspan="5" class="mut">будильников нет</td></tr>';
+  renderPush();
 }
 function saveAlarmsCommon(){
   S.cfg.AlarmFile=$("a-file").value.trim();
@@ -970,6 +986,144 @@ function saveCfg(){
   });
 }
 
+/* ---------- Фаза 4: будильник во вкладке + Web Push ---------- */
+const AL_CATCH=30*60000;
+let ringAudio=null,ringKey="",audioUnlocked=false;
+function getAudio(){if(!ringAudio){ringAudio=new Audio("/alarm.mp3");ringAudio.loop=true;}return ringAudio;}
+function unlockAudio(){
+  if(audioUnlocked)return;
+  try{const a=getAudio();a.muted=true;const pr=a.play();
+    if(pr)pr.then(()=>{a.pause();a.currentTime=0;a.muted=false;}).catch(()=>{a.muted=false;});
+    audioUnlocked=true;
+  }catch(e){}
+}
+document.addEventListener("click",unlockAudio,true);
+document.addEventListener("keydown",unlockAudio,true);
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k)||"[]");}catch(e){return[];}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v.slice(-300)));}catch(e){}}
+function alFireToday(a,now){
+  const m=a.Mode||"daily";
+  if(m==="days")return (a.Days||[]).includes(now.getDay()===0?7:now.getDay());
+  if(m==="everyN"){
+    const n=Math.max(1,a.EveryN||1);if(n<=1)return true;
+    if(!a.Anchor||!/^\d{8}$/.test(a.Anchor))return true;
+    const anc=new Date(+a.Anchor.slice(0,4),+a.Anchor.slice(4,6)-1,+a.Anchor.slice(6,8));
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    return Math.round((today-anc)/86400000)%n===0;
+  }
+  return true;
+}
+function startRing(key,label){
+  ringKey=key;
+  try{const a=getAudio();a.currentTime=0;a.play().catch(()=>{});}catch(e){}
+  $("ring-stop").style.display="";
+  try{if("Notification" in window&&Notification.permission==="granted")
+    new Notification("Будильник: "+label,{body:"Пора измерить давление",tag:"bpxor-tab-"+key});}catch(e){}
+}
+function stopRing(tellServer){
+  ringKey="";
+  try{if(ringAudio){ringAudio.pause();ringAudio.currentTime=0;}}catch(e){}
+  $("ring-stop").style.display="none";
+  if(tellServer)apiPost("/api/alarm/dismiss",{});
+}
+function testRing(){
+  unlockAudio();
+  setTimeout(()=>{try{const a=getAudio();a.currentTime=0;
+    a.play().then(()=>{ringKey="test";$("ring-stop").style.display="";})
+     .catch(()=>flash("Браузер блокирует звук — кликните по странице и повторите",false,6000));
+  }catch(e){}},120);
+}
+// порт десктопного CheckAlarms: те же режимы и окно догона 30 мин, ключи в localStorage
+async function tickAlarms(){
+  if(!S||!S.cfg)return;
+  const now=new Date();
+  const today=""+now.getFullYear()+p2(now.getMonth()+1)+p2(now.getDate());
+  const fired=lsGet("bpxFired"),ann=lsGet("bpxAnn");
+  const alarms=S.cfg.Alarms||[];
+  for(let i=0;i<alarms.length;i++){
+    const a=alarms[i];
+    if(!a.Enabled||!a.Time)continue;
+    const parts=a.Time.split(":");if(parts.length!==2)continue;
+    const hh=+parts[0],mm=+parts[1];if(isNaN(hh)||isNaN(mm))continue;
+    if(!alFireToday(a,now))continue;
+    const key=today+"_"+i+"_"+a.Time;
+    const target=new Date(now.getFullYear(),now.getMonth(),now.getDate(),hh,mm,0);
+    const diff=now-target;
+    if(!fired.includes(key)&&diff>=0&&diff<=AL_CATCH){
+      fired.push(key);lsSet("bpxFired",fired);
+      if(a.Mode==="everyN"&&!a.Anchor){a.Anchor=today;apiPost("/api/config",S.cfg).then(loadState);}
+      startRing(key,a.Label||a.Time);
+    }
+    const ahead=(S.cfg.AlarmAheadMin||0)*60000;
+    if(ahead>0&&!ann.includes(key)&&diff<0&&-diff<=ahead){
+      ann.push(key);lsSet("bpxAnn",ann);
+      flash("Через "+S.cfg.AlarmAheadMin+" мин будильник: "+(a.Label||a.Time),true,6000);
+    }
+  }
+}
+setInterval(tickAlarms,5000);
+// «Стоп» в push-уведомлении гасит звонок на сервере — вкладка подхватывает
+async function pollAlarmState(){
+  try{
+    const st=await (await fetch("/api/alarm/state")).json();
+    if(st.dismissed&&ringKey&&st.dismissed===ringKey)stopRing(false);// «Стоп» в push по temu же будильнику — вкладка замолкает
+  }catch(e){}
+}
+setInterval(pollAlarmState,10000);
+function urlB64ToUint8Array(base64String){
+  const padding="=".repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,"+").replace(/_/g,"/");
+  const raw=atob(base64);const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+async function pushToggle(){
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)){flash("Браузер не поддерживает push (нужен https или localhost)",false,8000);return;}
+  try{
+    const reg=await navigator.serviceWorker.register("/sw.js");
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted"){flash("Разрешение на уведомления не выдано",false,6000);return;}
+    if(!(await reg.pushManager.getSubscription())){
+      const vk=await (await fetch("/api/push/vapidkey")).json();
+      if(!vk.key){flash("Сервер не настроил VAPID",false,6000);return;}
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64ToUint8Array(vk.key)});
+      const j=await apiPost("/api/push/subscribe",sub.toJSON());
+      flash(j.ok?"Push включён":"Ошибка: "+(j.err||"?"),!!j.ok,5000);
+    }else flash("Push уже включён на этом браузере");
+    loadState();
+  }catch(e){flash("Push: "+e.message,false,8000);}
+}
+async function pushOff(){
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    const sub=reg&&await reg.pushManager.getSubscription();
+    if(sub){await apiPost("/api/push/unsubscribe",{endpoint:sub.endpoint});await sub.unsubscribe();}
+    flash("Push выключен");loadState();
+  }catch(e){flash("Push: "+e.message,false,6000);}
+}
+async function renderPush(){
+  const el=$("push-state");if(!el)return;
+  const tz=$("a-tz");if(tz)tz.textContent=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const et=$("a-emailto");if(et)et.textContent=S.cfg.EmailTo||"ящик логина";
+  if($("a-email"))$("a-email").checked=!!S.cfg.EmailFallback;
+  let st=null;try{st=await (await fetch("/api/push/status")).json();}catch(e){}
+  let subbed=false;
+  try{const reg=await navigator.serviceWorker.getRegistration();subbed=!!(reg&&await reg.pushManager.getSubscription());}catch(e){}
+  const btn=$("push-btn");
+  if(subbed||st&&st.subs>0){
+    btn.textContent="🔕 Отключить push на этом браузере";btn.onclick=pushOff;
+    el.textContent=st?("подписок на сервере: "+st.subs+(st.email?" · email-фолбэк настроен":" · email-фолбэк выключен (нужен бот на сервере)")):"";
+  }else{
+    btn.textContent="🔔 Включить push-уведомления";btn.onclick=pushToggle;
+    el.textContent=st&&st.vapid?"VAPID готов":"VAPID не настроен";
+  }
+}
+async function toggleEmailAl(on){
+  S.cfg.EmailFallback=on;
+  const j=await apiPost("/api/config",S.cfg);
+  flash(j.ok?"Сохранено":"Ошибка",!!j.ok);loadState();
+}
+
 /* ---------- старт ---------- */
 //["m-sys","m-dia","m-pulse","m-note"].forEach(id=>$(id).addEventListener("keydown",e=>{if(e.key==="Enter")saveM();}));
 document.addEventListener("DOMContentLoaded", () => {
@@ -991,6 +1145,11 @@ document.addEventListener("DOMContentLoaded", () => {
 		});
 	});
 	loadState();
+	if("serviceWorker" in navigator){
+		navigator.serviceWorker.register("/sw.js").then(()=>{
+			navigator.serviceWorker.addEventListener("message",e=>{if(e.data&&e.data.type==="bpxor-open")loadState();});
+		}).catch(()=>{});
+	}
 });
 
 </script>

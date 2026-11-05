@@ -1,4 +1,4 @@
-// bpxor — веб-порт BPMonitor. Фаза 2: IMAP-авторизация maddy, сессии, мультипользовательскость.
+﻿// bpxor — веб-порт BPMonitor. Фаза 2: IMAP-авторизация maddy, сессии, мультипользовательскость.
 // Kestrel на 127.0.0.1 за nginx; --data <root> = корень данных (users/<uid>/, sessions.json).
 using System;
 using System.Collections.Concurrent;
@@ -38,6 +38,7 @@ static class Program{
 		string cfgPath=Path.Combine(AppContext.BaseDirectory,"bpxor.config.json");
 		if(File.Exists(cfgPath)){ try{ JsonConvert.PopulateObject(File.ReadAllText(cfgPath),ACfg); }catch(Exception ex){ Console.WriteLine("config: "+ex.Message); } }
 		UserStore.Root=dataRoot; UserStore.Cfg=ACfg; Sessions.Init(dataRoot);
+		ACfg.DataRoot=dataRoot; VapidKeys.Init(dataRoot); PushStore.Init(dataRoot); AlarmScheduler.DataRoot=dataRoot;
 		JobGate.Max=Math.Max(1,ACfg.MaxConcurrentJobs);
 
 		var builder=Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder(new string[0]);
@@ -51,6 +52,7 @@ static class Program{
 		app.Use(AuthGate);
 		HttpApi.Map(app);
 		_=BackgroundLoop(app.Lifetime.ApplicationStopping);
+		_=AlarmScheduler.Run(app.Lifetime.ApplicationStopping);// Фаза 4: будильники по всем юзерам (не только загруженным в LRU)
 		app.Run();
 		return 0;
 	}
@@ -64,6 +66,7 @@ static class Program{
 		// ---- публичные маршруты ----
 		if((path=="/login"||path=="/login.html")&&req.Method=="GET"){ await ServeLoginPage(ctx); return; }
 		if(path=="/api/login"&&req.Method=="POST"){ await DoLogin(ctx); return; }
+		if(path=="/sw.js"&&req.Method=="GET"){ await ServeStatic(ctx,"sw.js","text/javascript; charset=utf-8"); return; }
 		if(path=="/logout"){ string t0=GetCookie(req,CookieSid); if(t0!=null) Sessions.Destroy(t0); DelCookie(ctx,CookieSid); DelCookie(ctx,CookieCsrf); ctx.Response.Redirect("/login"); return; }
 		// ---- сессия ----
 		var s=Sessions.Resolve(GetCookie(req,CookieSid));
@@ -77,7 +80,7 @@ static class Program{
 		if(p==null){ ctx.Response.StatusCode=403; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"достигнут лимит пользователей сервера\"}"); return; }
 		ctx.Items["profile"]=p; ctx.Items["uid"]=s.Uid;
 		// ---- CSRF на мутающих запросах (double-submit: cookie == заголовок) ----
-		if(req.Method=="POST"&&isApi){
+		if(req.Method=="POST"&&isApi&&path!="/api/alarm/dismiss"){
 			string ck=GetCookie(req,CookieCsrf),hd=req.Headers["X-CSRF"];
 			if(string.IsNullOrEmpty(ck)||hd!=ck){ ctx.Response.StatusCode=403; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"csrf\"}"); return; }
 		}
@@ -104,6 +107,12 @@ static class Program{
 		await R(200,"{\"ok\":true}");
 	}
 
+	static async Task ServeStatic(HttpContext ctx,string fname,string ctype){
+		string f=Path.Combine(AppContext.BaseDirectory,fname);
+		if(!File.Exists(f)){ ctx.Response.StatusCode=404; return; }
+		ctx.Response.ContentType=ctype;
+		await ctx.Response.WriteAsync(await File.ReadAllTextAsync(f));
+	}
 	static async Task ServeLoginPage(HttpContext ctx){
 		string f=Path.Combine(AppContext.BaseDirectory,"login.html");
 		if(!File.Exists(f)){ ctx.Response.StatusCode=500; await ctx.Response.WriteAsync("login.html не найден"); return; }
@@ -126,7 +135,6 @@ static class Program{
 			try{ await Task.Delay(1000,ct); } catch{ break; }
 			tick++;
 			foreach(Profile p in UserStore.Loaded()){
-				try{ p.CheckAlarms(); p.CheckMedReminders(); }catch(Exception ex){ p.Log("alarms: "+ex.Message); }
 				if(tick%3600==0) p.DailyBackup();
 				if((DateTime.Now-p.LastPoll).TotalMinutes<Math.Max(1,p.Cfg.PollMin)) continue;
 				p.LastPoll=DateTime.Now;

@@ -1,4 +1,4 @@
-// Фаза 2: авторизация IMAP-пробом maddy, серверные сессии, реестр профилей (cap 50).
+﻿// Фаза 2: авторизация IMAP-пробом maddy, серверные сессии, реестр профилей (cap 50).
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -25,6 +25,12 @@ public class AuthCfg{
 	public int Port=8090;
 	public bool SecureCookies=true;// false — только для локальной разработки по http: куки срабатывают без TLS
 	public int MaxConcurrentJobs=1;// глобальная очередь фоновых задач (решение: 2 vCPU — тяжёлые job'ы последовательно)
+	public string DataRoot="";// заполняет Main (VAPID/PushStore)
+	public string SmtpHost="127.0.0.1";// maddy submission на этом же сервере
+	public int SmtpPort=587;
+	public string SmtpUser="";// бот bpxor@example.org; пусто = email-фолбэк выключен
+	public string SmtpPass="";
+	public string SmtpFrom="bpxor@example.org";
 }
 
 static class MaddyAuth{
@@ -112,6 +118,7 @@ static class UserStore{
 	}
 	static void TouchLru(string uid){ _lru.Remove(uid); _lru.Add(uid); }
 	public static IEnumerable<Profile> Loaded(){ return _cache.Values.ToList(); }
+	public static Profile Peek(string uid){ lock(Lk){ return _cache.TryGetValue(uid,out Profile p)?p:null; } }// без загрузки с диска и без touch LRU
 }
 
 static class RateLimit{

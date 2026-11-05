@@ -181,12 +181,14 @@ server {
 - [x] Перенос самотеста (`--selftest`) на веб-сборку + тесты импорта — 18/18 (новые: WxCache, JobGate)
 - [x] Попутно найден и исправлен **дедлок**: `/api/weather/refresh` вызывал `PollWeatherAsync().GetAwaiter().GetResult()` под `lock(Sync)` в `Post()`, а `MaybePopup` внутри `PollWeatherAsync` берёт тот же `Sync` — обработчик переведён на `async/await` вне lock
 
-### Фаза 4 — будильники
-- [ ] Планировщик `IHostedService` (режимы daily/days/everyN, tz юзера, догон 30 мин, LastFired persist)
-- [ ] Web Push: VAPID, service worker, subscribe/unsubscribe API, доставка через NuGet WebPush
-- [ ] Кнопка «Стоп» в уведомлении → серверный dismissed-статус
-- [ ] Внутри-вкладочный таймер + alarm.mp3 (порт CheckAlarms в JS)
-- [ ] Email-фолбэк через maddy submission (per-user toggle)
+### Фаза 4 — будильники — **ГОТОВО 2026-11-05**
+- [x] Планировщик `AlarmScheduler` (`Scheduler.cs`): тик 30 с по **всем** каталогам `users/` (не только LRU), режимы daily/days/everyN, время в таймзоне юзера (`Cfg.Tz`, IANA, браузер сообщает при первом state), догон 30 мин; состояние (Fired/Ringing/Dismissed) персистится в `users/<uid>/alarms.json` — рестарт не плодит дубли; якорь everyN пишется и на диск, и в LRU-профиль (гонка SaveCfg закрыта)
+- [x] Web Push: VAPID P-256 генерируется один раз в `<data>/push/vapid.json` (0600), подписки в `push/subs.json` (dedup по endpoint, 404/410 чистят), доставка NuGet `WebPush 1.0.12`; API: `GET /api/push/vapidkey`, `POST /api/push/subscribe|unsubscribe`, `GET /api/push/status`; service worker `sw.js` (отдаётся публично до авторизации)
+- [x] Кнопка «Стоп» в уведомлении → SW шлёт `POST /api/alarm/dismiss` (исключение из CSRF-проверки — SW не знает токен) → `DismissedKey` в alarms.json; SPA опрашивает `GET /api/alarm/state` и замолкает по совпадению ключа; новое срабатывание сбрасывает dismiss
+- [x] Внутри-вкладочный таймер: порт CheckAlarms в JS (`tickAlarms`, 5 с), alarm.mp3 loop + баннер «⏹ Стоп», autoplay-разблокировка на первом клике/клавише, ключи Fired в localStorage
+- [x] Email-фолбэк: `SmtpSender` (голый TCP+STARTTLS+AUTH LOGIN, без новых зависимостей, maddy 587), per-user `Cfg.EmailFallback` + `Cfg.EmailTo` (пусто = ящик логина), шлётся только если push ни одной подписке не доставлен; креды бота в `bpxor.config.json` (SmtpUser/SmtpPass)
+- [x] Selftest 26/26 (7 новых проверок: расписание/tz/догон/dismiss/persist/PushStore/VAPID-JWT) + смоук на fake-IMAP+fake-SMTP+fake-push (22 проверки: ring→push JWT, email-фолбэк без подписок, dismiss без CSRF, отсутствие дублей)
+- [x] Попутно: `Task<bool>.Wait(timeout)` возвращает «успел ли», а не результат — `pushed` всегда true и email-фолбэк молчал; поймано смоуком, теперь `t.Wait(25s)` + `t.Result`
 
 ### Фаза 5 — трафик
 - [ ] `/api/delta?since=seq` + revision'ы конфига/НН/погоды

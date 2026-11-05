@@ -1,4 +1,4 @@
-// HTTP-слой: ASP.NET Core minimal API. Пути/JSON-семантика/блокировки — один в один с десктопным
+﻿// HTTP-слой: ASP.NET Core minimal API. Пути/JSON-семантика/блокировки — один в один с десктопным
 // p.Handle(HttpListenerContext). Отличия: нет IsLocalSameOrigin (заменит сессия из Фазы 2,
 // Kestrel слушает только loopback), HEAD покрывается MapMethods.
 using System;
@@ -231,6 +231,42 @@ static class HttpApi{
 			byte[] data=p.BuildExport(jo,kind,fmt,out string fname,out string ctype);
 			return File(data,ctype,fname);
 		}));
+		// ---------- Фаза 4: Web Push + состояние будильника ----------
+		app.MapMethods("/api/push/vapidkey",new[]{HttpMethods.Get,HttpMethods.Head},()=>Json(new{key=VapidKeys.PublicKey}));
+		app.MapPost("/api/push/subscribe",ctx=>Post(ctx,(p,jo,body)=>{
+			string ep=(string)jo["endpoint"]??"";
+			string p256=(string)jo["keys"]?["p256dh"]??"";
+			string auth=(string)jo["keys"]?["auth"]??"";
+			// реальные push-сервисы — только https; http разрешён лишь loopback (локальный смоук)
+			if(!(ep.StartsWith("https://")||ep.StartsWith("http://127.0.0.1")||ep.StartsWith("http://localhost"))) return Json(new{ok=false,err="некорректный endpoint"});
+			if(string.IsNullOrWhiteSpace(p256)||string.IsNullOrWhiteSpace(auth)) return Json(new{ok=false,err="нет ключей подписки"});
+			PushStore.Add(p.Uid,new PushStore.Sub{Endpoint=ep,P256dh=p256,Auth=auth});
+			return Json(new{ok=true,count=PushStore.Count(p.Uid)});
+		}));
+		app.MapPost("/api/push/unsubscribe",ctx=>Post(ctx,(p,jo,body)=>{
+			bool removed=PushStore.Remove(p.Uid,(string)jo["endpoint"]??"");
+			return Json(new{ok=true,removed,count=PushStore.Count(p.Uid)});
+		}));
+		app.MapMethods("/api/push/status",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Json(new{
+			subs=PushStore.Count(P(ctx).Uid),
+			vapid=!string.IsNullOrWhiteSpace(VapidKeys.PublicKey),
+			email=Program.ACfg.SmtpUser!=""}));
+		app.MapMethods("/api/alarm/state",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>{
+			Profile pr=P(ctx);
+			AlarmScheduler.State st=AlarmScheduler.State.Load(System.IO.Path.Combine(UserStore.DirFor(pr.Uid),"alarms.json"));
+			return Json(new{ringing=st.RingingKey!="",key=st.RingingKey,label=st.RingingLabel,dismissed=st.DismissedKey});
+		});
+		// «Стоп» в push-уведомлении и в баннере вкладки: гасит звонек на сервере (исключение CSRF — см. AuthGate)
+		app.MapPost("/api/alarm/dismiss",async ctx=>{
+			Profile pr=P(ctx);
+			string body=await ReadBody(ctx.Request); string key="";
+			try{ JObject jo=JObject.Parse(body); key=(string)jo["key"]??""; }catch{}
+			AlarmScheduler.State st=AlarmScheduler.State.Load(System.IO.Path.Combine(UserStore.DirFor(pr.Uid),"alarms.json"));
+			st.DismissedKey=!string.IsNullOrWhiteSpace(key)?key:st.RingingKey;
+			st.RingingKey=""; st.RingingLabel="";
+			st.Save();
+			await Json(new{ok=true,dismissed=st.DismissedKey}).ExecuteAsync(ctx);
+		});
 	}
 
 	static IResult Index(){

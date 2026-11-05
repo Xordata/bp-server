@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -54,6 +54,9 @@ public class Config{
 	public int NormSys=135,NormDia=85;// "норма": прогноз выше -> popup
 	public string Dob="";// дата рождения пользователя yyyy-MM-dd (фича НН "возраст"); пусто = не указан
 	public string Sex="";// пол: "m"|"f" (фича НН "пол"); пусто = не указан
+	public string Tz="";// IANA-таймзона юзера (браузер сообщает при открытии); серверный планировщик будильников считает время в ней
+	public bool EmailFallback=false;// письмо на ящик юзера, если push не доставлен (нужен бот SmtpUser в конфиге сервера)
+	public string EmailTo="";// куда слать; пусто = адрес логина (uid)
 	public int PopupCooldownMin=120;// пауза между popup
 	public HaCfg Ha=new HaCfg();
 	public NnCfg Nn=new NnCfg();

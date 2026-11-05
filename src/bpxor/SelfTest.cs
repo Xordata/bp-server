@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -30,24 +30,24 @@ partial class Profile
 		};
 		CultureInfo savedCulture=Thread.CurrentThread.CurrentCulture;
 		check("FireToday: daily",()=>{
-			if(!FireToday(new AlarmDef{Mode="daily"},DateTime.Now)) throw new Exception("daily должен срабатывать");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="daily"},DateTime.Now)) throw new Exception("daily должен срабатывать");
 		});
 		check("FireToday: days (ISO 1=Пн..7=Вс)",()=>{
 			DateTime now=DateTime.Now;
 			int iso=(int)now.DayOfWeek; if(iso==0) iso=7;
-			if(!FireToday(new AlarmDef{Mode="days",Days=new List<int>{iso}},now)) throw new Exception("сегодняшний день должен срабатывать");
-			if(FireToday(new AlarmDef{Mode="days",Days=new List<int>{iso==1?2:1}},now)) throw new Exception("чужой день не должен срабатывать");
-			if(FireToday(new AlarmDef{Mode="days",Days=new List<int>()},now)) throw new Exception("пустой список дней не должен срабатывать");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="days",Days=new List<int>{iso}},now)) throw new Exception("сегодняшний день должен срабатывать");
+			if(AlarmScheduler.FireToday(new AlarmDef{Mode="days",Days=new List<int>{iso==1?2:1}},now)) throw new Exception("чужой день не должен срабатывать");
+			if(AlarmScheduler.FireToday(new AlarmDef{Mode="days",Days=new List<int>()},now)) throw new Exception("пустой список дней не должен срабатывать");
 		});
 		check("FireToday: everyN + Anchor",()=>{
 			DateTime now=DateTime.Now;
 			string today=now.ToString("yyyyMMdd");
-			if(!FireToday(new AlarmDef{Mode="everyN",EveryN=1},now)) throw new Exception("N=1 всегда срабатывает");
-			if(!FireToday(new AlarmDef{Mode="everyN",EveryN=3,Anchor=""},now)) throw new Exception("пустой якорь = первый раз, срабатываем");
-			if(!FireToday(new AlarmDef{Mode="everyN",EveryN=3,Anchor="мусор"},now)) throw new Exception("битый якорь = первый раз, срабатываем");
-			if(!FireToday(new AlarmDef{Mode="everyN",EveryN=3,Anchor=today},now)) throw new Exception("якорь=сегодня -> 0%3=0, срабатывает");
-			if(FireToday(new AlarmDef{Mode="everyN",EveryN=2,Anchor=now.AddDays(-1).ToString("yyyyMMdd")},now)) throw new Exception("1 день от якоря при N=2 не должен");
-			if(!FireToday(new AlarmDef{Mode="everyN",EveryN=2,Anchor=now.AddDays(-2).ToString("yyyyMMdd")},now)) throw new Exception("2 дня от якоря при N=2 должен");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="everyN",EveryN=1},now)) throw new Exception("N=1 всегда срабатывает");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="everyN",EveryN=3,Anchor=""},now)) throw new Exception("пустой якорь = первый раз, срабатываем");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="everyN",EveryN=3,Anchor="мусор"},now)) throw new Exception("битый якорь = первый раз, срабатываем");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="everyN",EveryN=3,Anchor=today},now)) throw new Exception("якорь=сегодня -> 0%3=0, срабатывает");
+			if(AlarmScheduler.FireToday(new AlarmDef{Mode="everyN",EveryN=2,Anchor=now.AddDays(-1).ToString("yyyyMMdd")},now)) throw new Exception("1 день от якоря при N=2 не должен");
+			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="everyN",EveryN=2,Anchor=now.AddDays(-2).ToString("yyyyMMdd")},now)) throw new Exception("2 дня от якоря при N=2 должен");
 		});
 		check("JT: форматы дат под ru-культурой",()=>{
 			Thread.CurrentThread.CurrentCulture=new CultureInfo("ru-RU");
@@ -325,6 +325,125 @@ partial class Profile
 			if(!RateLimit.Allow("k",1)) throw new Exception("backoff не истёк");
 			RateLimit.Ok("k");
 			UserStore.Root=null;// самодостаточность: следующий запуск selftest в другой песочнице
+		});
+		check("Фаза 4: планировщик — daily, догон 30 мин, без дублей",()=>{
+			Config cfg=new Config(); cfg.Tz="UTC";
+			cfg.Alarms=new List<AlarmDef>{new AlarmDef{Time="08:00",Label="утро"}};
+			AlarmScheduler.State st=new AlarmScheduler.State();
+			DateTime before=new DateTime(2026,11,5,7,55,0,DateTimeKind.Utc);// до цели
+			if(AlarmScheduler.ComputeDue(cfg,st,before).AlarmKeys.Count!=0) throw new Exception("до цели не должен срабатывать");
+			DateTime inside=new DateTime(2026,11,5,8,10,0,DateTimeKind.Utc);// в окне догона
+			AlarmScheduler.Due due=AlarmScheduler.ComputeDue(cfg,st,inside);
+			if(due.AlarmKeys.Count!=1) throw new Exception("в окне догона должен сработать");
+			if(st.RingingKey!=due.AlarmKeys[0]||st.RingingLabel!="утро") throw new Exception("ringing-состояние не записано");
+			if(AlarmScheduler.ComputeDue(cfg,st,inside).AlarmKeys.Count!=0) throw new Exception("повторный тик: дубль срабатывания");
+			DateTime late=new DateTime(2026,11,5,8,35,0,DateTimeKind.Utc);// окно 30 мин прошло
+			if(AlarmScheduler.ComputeDue(cfg,st,late).AlarmKeys.Count!=0) throw new Exception("за окном догона не должен срабатывать");
+			if(!due.AlarmKeys[0].StartsWith("20261105_0_08:00")) throw new Exception("формат ключа: "+due.AlarmKeys[0]);
+		});
+		check("Фаза 4: планировщик — таймзона юзера (сервер в UTC)",()=>{
+			Config cfg=new Config(); cfg.Tz="Europe/Moscow";// UTC+3
+			cfg.Alarms=new List<AlarmDef>{new AlarmDef{Time="10:00"}};
+			AlarmScheduler.State st=new AlarmScheduler.State();
+			DateTime earlyUtc=new DateTime(2026,11,5,6,50,0,DateTimeKind.Utc);// Мск 09:50 — рано
+			if(AlarmScheduler.ComputeDue(cfg,st,earlyUtc).AlarmKeys.Count!=0) throw new Exception("по Мск ещё 09:50 — не должен");
+			DateTime okUtc=new DateTime(2026,11,5,7,10,0,DateTimeKind.Utc);// Мск 10:10 — в окне
+			AlarmScheduler.Due due=AlarmScheduler.ComputeDue(cfg,st,okUtc);
+			if(due.AlarmKeys.Count!=1||!due.AlarmKeys[0].StartsWith("20261105_0_10:00")) throw new Exception("по Мск 10:10 должен сработать, ключи: "+string.Join(",",due.AlarmKeys));
+			Config bad=new Config(); bad.Tz="Нет/Такой/Зоны"; bad.Alarms=new List<AlarmDef>{new AlarmDef{Time="08:00"}};
+			if(AlarmScheduler.ComputeDue(bad,new AlarmScheduler.State(),new DateTime(2026,11,5,8,10,0,DateTimeKind.Utc)).AlarmKeys.Count!=1) throw new Exception("битая tz — фолбэк UTC, должен сработать");
+		});
+		check("Фаза 4: планировщик — days/everyN + напоминания о лекарствах",()=>{
+			DateTime nowUtc=new DateTime(2026,11,5,10,5,0,DateTimeKind.Utc);// 2026-11-05 = четверг (ISO 4)
+			Config cfg=new Config(); cfg.Tz="UTC";
+			cfg.Alarms=new List<AlarmDef>{
+				new AlarmDef{Time="10:00",Mode="days",Days=new List<int>{4}},
+				new AlarmDef{Time="10:00",Mode="days",Days=new List<int>{5}},
+				new AlarmDef{Time="10:00",Mode="everyN",EveryN=2,Anchor="20261101"},
+				new AlarmDef{Time="10:00",Mode="everyN",EveryN=2,Anchor="20261102"}
+			};
+			cfg.MedTimes=new Dictionary<string,List<string>>{{"тестмед",new List<string>{"10:00","23:00"}}};
+			cfg.Meds=new List<string>{"Тест-Мед!"};
+			AlarmScheduler.State st=new AlarmScheduler.State();
+			AlarmScheduler.Due due=AlarmScheduler.ComputeDue(cfg,st,nowUtc);
+			if(due.AlarmKeys.Count!=2) throw new Exception("должны: days(чт) + everyN(4 дня от якоря N=2), получили "+due.AlarmKeys.Count);
+			if(due.MedKeys.Count!=1) throw new Exception("мед-напоминание 10:00 должно сработать, 23:00 — нет");
+			if(due.MedLabels.Count!=1||due.MedLabels[0]!="Тест-Мед!") throw new Exception("нормализация ключа MedTimes -> название: "+string.Join(",",due.MedLabels));
+			if(AlarmScheduler.ComputeDue(cfg,st,nowUtc).MedKeys.Count!=0) throw new Exception("дубль мед-напоминания");
+			// everyN без якоря: фиксируется якорь = сегодня
+			Config cfg2=new Config(); cfg2.Tz="UTC";
+			cfg2.Alarms=new List<AlarmDef>{new AlarmDef{Time="10:00",Mode="everyN",EveryN=3}};
+			AlarmScheduler.State st2=new AlarmScheduler.State();
+			AlarmScheduler.Due d2=AlarmScheduler.ComputeDue(cfg2,st2,nowUtc);
+			if(d2.AlarmKeys.Count!=1||!d2.AnchorsChanged||cfg2.Alarms[0].Anchor!="20261105") throw new Exception("якорь everyN не зафиксирован");
+		});
+		check("Фаза 4: alarms.json — persist состояния",()=>{
+			string dir=Path.Combine(ExeDir,"sched-test");
+			if(Directory.Exists(dir)) Directory.Delete(dir,true);
+			Directory.CreateDirectory(dir);
+			string path=Path.Combine(dir,"alarms.json");
+			AlarmScheduler.State st=AlarmScheduler.State.Load(path);
+			st.Fired["k1"]=DateTime.UtcNow; st.RingingKey="k1"; st.RingingLabel="тест";
+			st.Save();
+			AlarmScheduler.State st2=AlarmScheduler.State.Load(path);
+			if(!st2.Fired.ContainsKey("k1")||st2.RingingKey!="k1"||st2.RingingLabel!="тест") throw new Exception("round-trip потерян");
+			st2.RingingKey=""; st2.DismissedKey="k1"; st2.Save();
+			AlarmScheduler.State st3=AlarmScheduler.State.Load(path);
+			if(st3.RingingKey!=""||st3.DismissedKey!="k1") throw new Exception("dismiss не персистится");
+			Directory.Delete(dir,true);
+		});
+		check("Фаза 4: dismiss сбрасывается новым срабатыванием",()=>{
+			Config cfg=new Config(); cfg.Tz="UTC";
+			cfg.Alarms=new List<AlarmDef>{new AlarmDef{Time="08:00"},new AlarmDef{Time="09:00"}};
+			AlarmScheduler.State st=new AlarmScheduler.State();
+			AlarmScheduler.ComputeDue(cfg,st,new DateTime(2026,11,5,8,10,0,DateTimeKind.Utc));
+			st.DismissedKey=st.RingingKey; st.RingingKey="";
+			AlarmScheduler.Due due=AlarmScheduler.ComputeDue(cfg,st,new DateTime(2026,11,5,9,10,0,DateTimeKind.Utc));
+			if(due.AlarmKeys.Count!=1) throw new Exception("09:00 должен сработать");
+			if(st.DismissedKey!="") throw new Exception("dismiss не сброшен новым срабатыванием: "+st.DismissedKey);
+		});
+		check("Фаза 4: AlarmScheduler.LoadCfg — Replace, без дублей дефолтных будильников",()=>{
+			Config cfg=new Config(); cfg.Tz="UTC"; cfg.Alarms=new List<AlarmDef>{new AlarmDef{Time="07:00",Label="один"}};
+			string f=Path.Combine(ExeDir,"cfg-load-test.json");
+			File.WriteAllText(f,JsonConvert.SerializeObject(cfg));
+			Config back=AlarmScheduler.LoadCfg(f);
+			if(back==null||back.Alarms.Count!=1||back.Alarms[0].Time!="07:00") throw new Exception("Replace-разбор вернул "+(back==null?"null":back.Alarms.Count.ToString())+" будильников");
+			File.Delete(f);
+		});
+		check("Фаза 4: PushStore — добавление/дедуп/удаление/persist",()=>{
+			string dir=Path.Combine(ExeDir,"push-test");
+			if(Directory.Exists(dir)) Directory.Delete(dir,true);
+			Directory.CreateDirectory(dir);
+			PushStore.Init(dir);
+			PushStore.Add("u@xor.world",new PushStore.Sub{Endpoint="https://push.example/a",P256dh="bk",Auth="YXV0"});
+			PushStore.Add("u@xor.world",new PushStore.Sub{Endpoint="https://push.example/a",P256dh="bk2",Auth="YXV0"});// тот же endpoint -> замена
+			if(PushStore.Count("u@xor.world")!=1) throw new Exception("дедуп по endpoint: "+PushStore.Count("u@xor.world"));
+			PushStore.Add("u@xor.world",new PushStore.Sub{Endpoint="https://push.example/b",P256dh="bk",Auth="YXV0"});
+			if(PushStore.Count("u@xor.world")!=2) throw new Exception("разные endpoint: "+PushStore.Count("u@xor.world"));
+			PushStore.Init(dir);// перечитать с диска
+			if(PushStore.Count("u@xor.world")!=2) throw new Exception("persist потерян");
+			if(!PushStore.Remove("u@xor.world","https://push.example/a")) throw new Exception("Remove вернул false");
+			if(PushStore.Remove("u@xor.world","https://net-takogo")) throw new Exception("Remove чужого вернул true");
+			if(PushStore.Count("u@xor.world")!=1) throw new Exception("после удаления: "+PushStore.Count("u@xor.world"));
+			Directory.Delete(dir,true);
+		});
+		check("Фаза 4: VAPID — генерация ключей и подпись JWT (WebPush)",()=>{
+			string dir=Path.Combine(ExeDir,"vapid-test");
+			if(Directory.Exists(dir)) Directory.Delete(dir,true);
+			Directory.CreateDirectory(dir);
+			VapidKeys.Init(dir);
+			string pub=VapidKeys.PublicKey,priv=VapidKeys.PrivateKey;
+			if(string.IsNullOrEmpty(pub)||string.IsNullOrEmpty(priv)) throw new Exception("ключи не сгенерированы");
+			if(!File.Exists(Path.Combine(dir,"push","vapid.json"))) throw new Exception("vapid.json не записан");
+			byte[] q=Convert.FromBase64String(pub.Replace('-','+').Replace('_','/').PadRight((pub.Length+3)/4*4,'='));
+			if(q.Length!=65||q[0]!=4) throw new Exception("публичный ключ не uncompressed P-256 point");
+			// проверяем, что библиотека принимает наш формат ключей: VapidHelper подписывает JWT (ES256)
+			var vh=WebPush.VapidHelper.GetVapidHeaders("https://example.com/",VapidKeys.Subject,pub,priv,DateTimeOffset.UtcNow.ToUnixTimeSeconds()+60);// 5-й аргумент — unix-время истечения
+			string jwt; vh.TryGetValue("Authorization",out jwt);
+			if(string.IsNullOrEmpty(jwt)||!jwt.StartsWith("WebPush ")) throw new Exception("VAPID Authorization не сформирован: "+jwt);
+			VapidKeys.Init(dir);// повторный Init читает с диска — те же ключи
+			if(VapidKeys.PublicKey!=pub) throw new Exception("ключи не персистятся");
+			Directory.Delete(dir,true);
 		});
 		Thread.CurrentThread.CurrentCulture=savedCulture;
 		Console.WriteLine(failed==0?"SELFTEST OK":"SELFTEST FAILED: "+failed);
