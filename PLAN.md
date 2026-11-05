@@ -199,10 +199,11 @@ server {
 - [x] SSE `/api/events` вместо поллинга state — EventHub (Channel на вкладку), публикация: Post-мутации, конец PollWeatherAsync, FinishJob, dismiss; heartbeat 25 с; клиент: EventSource + фолбэк-поллинг 30 с при CLOSED
 - [x] (сверх списка) порт сервера убран из настроек UI и игнорируется в /api/config (запрос владельца 2026-11-05)
 
-### Фаза 6 — титульная страница
-- [ ] Рефакторинг index.html xor.world на data-driven список кнопок
-- [ ] Кнопка bp.xor.world
-- [ ] (опц.) sites.json + рендер через fetch
+### Фаза 6 — титульная страница — **ГОТОВО 2026-11-05 (ждёт деплоя пользователем)**
+- [x] Рефакторинг index.html xor.world на data-driven список кнопок — массив SITES в конце <script> (добавить сайт = одна строка); sites.json не нужен (инлайн-массив, без лишнего fetch)
+- [x] Кнопка bp.xor.world — «Дневник АД» с иконкой сердце+ЭКГ, между Exchange и Windows 95
+- [x] Мобильная вёрстка (запрос владельца): #button-container — flex-wrap + align-content:center + clamp-шрифт + 100dvh вместо column-media-query; проверено headless-браузером 375x667 / 812x375 / 1280x800 — ни одна кнопка не вылезает; tubes.js и клик-смена-цвет сохранены один в один
+- Файл в репо: deploy/xor.world-index.html (на сервере — /var/www/html/index.html)
 
 ### Фаза 7 — ветка BPMonitor-Sync (десктоп ↔ веб, дизайн §14)
 - [ ] Сервер: `/api/sync/push|pull` + раздел «Устройства» в веб-настройках (генерация/отзыв API-токенов)
