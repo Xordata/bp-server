@@ -1,0 +1,22 @@
+# /etc/systemd/system/bpxor.service
+[Unit]
+Description=BP diary bp.xor.world
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bpxor
+Group=bpxor
+ExecStart=/usr/local/bin/bpxor/bpxor --data /opt/bpdata
+WorkingDirectory=/usr/local/bin/bpxor
+Restart=always
+RestartSec=5
+ReadWritePaths=/opt/bpdata
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

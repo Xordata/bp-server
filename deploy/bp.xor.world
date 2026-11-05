@@ -1,0 +1,51 @@
+# /etc/nginx/sites-available/bp.xor.world
+# Фаза 0: сначала порт 80, затем `certbot --nginx -d bp.xor.world --redirect`
+# сам добавит 443/TLS и редирект.
+
+limit_req_zone $binary_remote_addr zone=bpxor_login:10m rate=5r/m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name bp.xor.world;
+
+    client_max_body_size 20m;   # импорт export/all
+
+    access_log /var/log/nginx/bp.access.log combined;
+
+    # brotli (libnginx-mod-http-brotli-filter) + gzip-fallback
+    brotli on;
+    brotli_comp_level 5;
+    brotli_types application/json text/css application/javascript image/svg+xml;
+    gzip on;
+    gzip_types application/json text/css application/javascript image/svg+xml;
+
+    location /api/login {
+        limit_req zone=bpxor_login burst=3 nodelay;
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;
+    }
+
+    # SSE — без буферизации, долгий read timeout
+    location /api/events {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;
+    }
+}
