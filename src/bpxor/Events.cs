@@ -23,6 +23,7 @@ static class EventHub{
 			if(Subs.TryGetValue(uid,out l)){ l.Remove(ch); if(l.Count==0) Subs.TryRemove(uid,out l); }
 		}
 	}
+	public static bool HasSubscribers(string uid){ lock(Subs){ return Subs.TryGetValue(uid,out List<Channel<string>> l)&&l.Count>0; } }
 	public static void Publish(string uid,string json){
 		List<Channel<string>> l;
 		if(!Subs.TryGetValue(uid,out l)) return;

@@ -152,17 +152,25 @@ static class AlarmScheduler{
 		}
 		if(!due.Changed)return;
 		st.Save();
-		foreach(string label in due.AlarmLabels)
-			NotifyUser(uid,cfg,"Будильник: "+label,"Пора измерить давление. "+label);
+		// открытые вкладки (SSE) звонят сами; push — только если ни одной вкладки нет,
+		// иначе пользователь слышит и mp3 во вкладке, и push-звук одновременно (дубли)
+		bool online=false; try{ online=EventHub.HasSubscribers(uid); }catch{}
+		for(int i=0;i<due.AlarmKeys.Count;i++){
+			try{ EventHub.Publish(uid,JObject.FromObject(new{t="alarm",key=due.AlarmKeys[i],label=due.AlarmLabels[i]}).ToString(Formatting.None)); }catch{}
+		}
+		for(int i=0;i<due.AlarmLabels.Count;i++)
+			NotifyUser(uid,cfg,"Будильник: "+due.AlarmLabels[i],"Пора измерить давление. "+due.AlarmLabels[i],!online);
 		foreach(string med in due.MedLabels)
 			NotifyUser(uid,cfg,"Лекарства","Пора принять: "+med);
 	}
 
-	static void NotifyUser(string uid,Config cfg,string title,string body){
+	static void NotifyUser(string uid,Config cfg,string title,string body,bool push=true){
 		bool pushed=false;
-		try{ var t=PushStore.SendToUser(uid,title,body); if(t.Wait(TimeSpan.FromSeconds(25))) pushed=t.Result; }// Wait(таймаут) = «успел ли», НЕ результат; Result берём только после Wait (зависший push-эндпоинт не блокирует цикл)
-		catch(Exception ex){ Console.WriteLine("push "+uid+": "+ex.Message); }
-		if(!pushed&&cfg.EmailFallback&&!string.IsNullOrWhiteSpace(Program.ACfg.SmtpUser)){
+		if(push){// false = звоним открытой вкладке по SSE — push и email не плодим
+			try{ var t=PushStore.SendToUser(uid,title,body); if(t.Wait(TimeSpan.FromSeconds(25))) pushed=t.Result; }// Wait(таймаут) = «успел ли», НЕ результат; Result берём только после Wait (зависший push-эндпоинт не блокирует цикл)
+			catch(Exception ex){ Console.WriteLine("push "+uid+": "+ex.Message); }
+		}
+		if(push&&!pushed&&cfg.EmailFallback&&!string.IsNullOrWhiteSpace(Program.ACfg.SmtpUser)){
 			string to=string.IsNullOrWhiteSpace(cfg.EmailTo)?uid:cfg.EmailTo;
 			try{ SmtpSender.Send(Program.ACfg,to,title,body); }catch(Exception ex){ Console.WriteLine("email "+uid+": "+ex.Message); }
 		}

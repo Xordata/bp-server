@@ -344,6 +344,7 @@ static class HttpApi{
 			st.RingingKey=""; st.RingingLabel="";
 			st.Save();
 			pr.PublishChange();
+			try{ EventHub.Publish(pr.Uid,JObject.FromObject(new{t="dismiss",key=st.DismissedKey}).ToString(Formatting.None)); }catch{}// открытые вкладки замолкают сразу, не через 10 с поллинга
 			await Json(new{ok=true,dismissed=st.DismissedKey}).ExecuteAsync(ctx);
 		});
 

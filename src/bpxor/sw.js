@@ -1,7 +1,7 @@
 // bpxor service worker (Фаза 4 + F1 PWA): push + «Стоп» + кэш статики для установки на домашний экран.
 // Манифест намеренно НЕ в кэше: после удаления шортката Chrome должен увидеть свежий манифест, иначе
 // повторная установка «не предлагается» (кэш v1 держал старый манифест без id).
-var CACHE="bpxor-v2";
+var CACHE="bpxor-v3";
 var STATIC=["/alarm.mp3","/icons/icon-192.png","/icons/icon-512.png","/icons/icon-maskable-512.png","/icons/apple-touch-icon.png"];
 self.addEventListener("install",function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(STATIC);}).catch(function(){}));
