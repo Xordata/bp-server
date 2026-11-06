@@ -20,7 +20,7 @@ static class HttpApi{
 		using(StreamReader sr=new StreamReader(r.Body,Encoding.UTF8)) return await sr.ReadToEndAsync();
 	}
 	static IResult Json(object o)=>Results.Content(JsonConvert.SerializeObject(o),"application/json; charset=utf-8");
-	static IResult Err(string msg)=>Results.Content("{\"ok\":false,\"err\":\""+(msg??"").Replace("\"","'")+"\"}","application/json; charset=utf-8");
+	static IResult Err(string msg)=>Json(new{ok=false,err=msg});// сериализация через JsonConvert: экранирует и \, и переводы строк
 	static IResult File(byte[] b,string ctype,string fname=null){
 		if(fname!=null) return Results.File(b,ctype+"; charset=utf-8",fname);
 		return Results.Content(Encoding.UTF8.GetString(b),ctype+"; charset=utf-8");
@@ -208,6 +208,10 @@ static class HttpApi{
 			if(nc.Ha!=null&&nc.Ha.Token==Profile.TokenMask) nc.Ha.Token=oldToken;
 			nc.Meds=nc.Meds.Where(x=>!string.IsNullOrWhiteSpace(x)).Select(x=>x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 			nc.Noises=nc.Noises.Where(x=>!string.IsNullOrWhiteSpace(x)).Select(x=>x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+			if(nc.Meds.Count>50) nc.Meds=nc.Meds.Take(50).ToList();// DoS-капы: раздутые списки раздувают InDim/журнал
+			if(nc.Noises.Count>200) nc.Noises=nc.Noises.Take(200).ToList();
+			if(nc.Alarms!=null&&nc.Alarms.Count>50) nc.Alarms=nc.Alarms.Take(50).ToList();
+			if(!string.IsNullOrWhiteSpace(nc.EmailTo)&&!System.Text.RegularExpressions.Regex.IsMatch(nc.EmailTo,"^[^@\\s]+@[^@\\s.]+(\\.[^@\\s.]+)+$")) return Json(new{ok=false,err="некорректный адрес EmailTo"});// иначе SMTP-инъекция через RCPT TO
 			if(nc.MedKt!=null){ System.Collections.Generic.Dictionary<string,MedKt> mk=new System.Collections.Generic.Dictionary<string,MedKt>(); foreach(var kv in nc.MedKt) if(!string.IsNullOrWhiteSpace(kv.Key)) mk[p.NormMed(kv.Key)]=kv.Value; nc.MedKt=mk; }
 			if(nc.MedTimes!=null){
 				System.Collections.Generic.Dictionary<string,System.Collections.Generic.List<string>> mt=new System.Collections.Generic.Dictionary<string,System.Collections.Generic.List<string>>();
@@ -227,7 +231,7 @@ static class HttpApi{
 		app.MapPost("/api/autostart",ctx=>Post(ctx,(p,jo,body)=>{ p.SetAutostart((bool)jo["on"]); p.SaveCfg(); return Json(new{ok=true}); }));
 		app.MapPost("/api/alarm/test",ctx=>Post(ctx,(p,jo,body)=>{ p.StartAlarm(); return Json(new{ok=true}); }));
 		app.MapPost("/api/alarm/stop",ctx=>Post(ctx,(p,jo,body)=>{ p.StopAlarm(); return Json(new{ok=true}); }));
-		app.MapPost("/api/nn/train",ctx=>Post(ctx,(p,jo,body)=>{ p.Train(); p.SaveNn(); return Json(new{ok=true}); }));
+		app.MapPost("/api/nn/train",ctx=>StartJob("train",ctx));// под JobGate: синхронный train под lock(Sync) позволял сжигать CPU повторными запросами
 		app.MapPost("/api/nn/reset",ctx=>Post(ctx,(p,jo,body)=>{ p.D.Nn=p.NewNn(p.Cfg.Nn.Hidden,p.Cfg.Nn.Hidden2,p.InDim()); p.Train(); p.SaveNn(); return Json(new{ok=true}); }));
 		app.MapPost("/api/medtake",ctx=>Post(ctx,(p,jo,body)=>{
 			string med=jo["med"]!=null?jo["med"].ToString().Trim():"";
@@ -290,6 +294,7 @@ static class HttpApi{
 		});
 		app.MapPost("/api/export",ctx=>Post(ctx,(p,jo,body)=>{
 			string kind=jo["kind"]!=null?jo["kind"].ToString():"rows";
+			if(kind!="doctor"&&kind!="rows"&&kind!="days") kind="rows";// белый список: kind попадает в имя файла и MIME
 			string fmt=jo["fmt"]!=null?jo["fmt"].ToString():"csv";
 			byte[] data=p.BuildExport(jo,kind,fmt,out string fname,out string ctype);
 			return File(data,ctype,fname);
@@ -314,6 +319,7 @@ static class HttpApi{
 						if(what=="all"){ data=Encoding.UTF8.GetBytes(p.ExportAll().ToString(Formatting.None)); fname="bpmonitor-export-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json"; ctype="application/json"; }
 						else{
 							string kind=jo["kind"]!=null?jo["kind"].ToString():"doctor";
+						if(kind!="doctor"&&kind!="rows"&&kind!="days") kind="doctor";
 							string fmt=jo["fmt"]!=null?jo["fmt"].ToString():"csv";
 							data=p.BuildExport(jo,kind,fmt,out fname,out ctype);
 						}
@@ -345,6 +351,7 @@ static class HttpApi{
 			// реальные push-сервисы — только https; http разрешён лишь loopback (локальный смоук)
 			if(!(ep.StartsWith("https://")||ep.StartsWith("http://127.0.0.1")||ep.StartsWith("http://localhost"))) return Json(new{ok=false,err="некорректный endpoint"});
 			if(string.IsNullOrWhiteSpace(p256)||string.IsNullOrWhiteSpace(auth)) return Json(new{ok=false,err="нет ключей подписки"});
+			if(PushStore.Count(p.Uid)>=20&&!PushStore.Has(p.Uid,ep)) return Json(new{ok=false,err="слишком много подписок (20) — отключите старые"});// кап + Has для переподписки того же endpoint
 			PushStore.Add(p.Uid,new PushStore.Sub{Endpoint=ep,P256dh=p256,Auth=auth});
 			return Json(new{ok=true,count=PushStore.Count(p.Uid)});
 		}));
@@ -444,12 +451,16 @@ static class HttpApi{
 	}
 
 	// фоновые задачи: ответ сразу, прогресс в /api/job (десктопная семантика)
+	static readonly System.Collections.Concurrent.ConcurrentDictionary<string,DateTime> _jobStarts=new System.Collections.Concurrent.ConcurrentDictionary<string,DateTime>();
 	static async Task StartJob(string kind,HttpContext ctx){
 		Profile p=P(ctx);
+		DateTime lstart; _jobStarts.TryGetValue(p.Uid,out lstart);
+		if((DateTime.Now-lstart).TotalSeconds<10){ await Json(new{ok=false,err="задачи — не чаще раза в 10 секунд"}).ExecuteAsync(ctx); return; }// DoS-троттл тяжёлых задач на юзера
 		string jb;
 		try{ jb=await ReadBody(ctx.Request); } catch(Exception ex){ await Err(ex.Message).ExecuteAsync(ctx); return; }
 		JObject jo=null; try{ jo=jb.Length>0?JObject.Parse(jb):new JObject(); }catch{}
 		if(!p.TryStartJob(kind)){ await Json(new{ok=false,err="уже выполняется: "+p.CurrentJobName}).ExecuteAsync(ctx); return; }
+		_jobStarts[p.Uid]=DateTime.Now;
 		DateTime? fu=null;
 		if(kind=="backfill"&&jo!=null&&jo["force_until"]!=null){ try{ fu=p.JT(jo,"force_until"); }catch{} }
 		int holdout=0;
@@ -459,6 +470,7 @@ static class HttpApi{
 				p.JobQueued=false;
 				lock(p.Sync){
 					switch(kind){
+						case"train":{ p.Train(); p.SaveNn(); p.JobResult="обучение выполнено"; break; }
 						case"train_ga":{ double loss=p.TrainGenetic(); p.JobResult="MSE="+Math.Round(loss,4); p.SaveNn(); break; }
 						case"validate":{
 							JObject r=p.Validate(holdout);

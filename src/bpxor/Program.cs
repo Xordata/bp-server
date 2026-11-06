@@ -66,7 +66,7 @@ static class Program{
 
 	static async Task AuthGate(HttpContext ctx,Func<Task> next){
 		var req=ctx.Request;
-		string path=req.Path.Value??"/";
+		string path=(req.Path.Value??"/").ToLowerInvariant();// гейт-проверки регистронезависимы, как маршрутизация ASP.NET (иначе /API/... минует гейт)
 		// ---- публичные маршруты ----
 		if((path=="/login"||path=="/login.html")&&req.Method=="GET"){ await ServeLoginPage(ctx); return; }
 		if(path=="/api/login"&&req.Method=="POST"){ await DoLogin(ctx); return; }
@@ -141,6 +141,7 @@ static class Program{
 		try{ JObject jo=JObject.Parse(body); login=((string)jo["login"]??"").Trim().ToLowerInvariant(); pass=(string)jo["pass"]??""; }catch{}
 		async Task R(int code,string json){ ctx.Response.StatusCode=code; ctx.Response.ContentType="application/json; charset=utf-8"; await ctx.Response.WriteAsync(json); }
 		if(!login.EndsWith("@"+ACfg.Domain)||login.Length==ACfg.Domain.Length+1){ await R(401,"{\"ok\":false,\"err\":\"неверный логин или пароль\"}"); return; }
+		if(!System.Text.RegularExpressions.Regex.IsMatch(login,"^[a-z0-9._%+-]+@[a-z0-9.-]+$")){ await R(401,"{\"ok\":false,\"err\":\"неверный логин или пароль\"}"); return; }// uid попадает в путь users/<uid> — только безопасные символы
 		string ip=ctx.Connection.RemoteIpAddress?.ToString()??"?";
 		string key=ip+"|"+login;
 		if(!RateLimit.Allow(key,ACfg.FailDelaySec)){ await R(429,"{\"ok\":false,\"err\":\"слишком много попыток, подождите\"}"); return; }

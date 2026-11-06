@@ -137,6 +137,9 @@ partial class Profile
 	}
 	// размерность входа зависит от списка лекарств; при изменении — переучиваем модель с нуля
 	public void EnsureNnDim(){
+		if(Cfg.Nn==null) Cfg.Nn=new NnCfg();
+		Cfg.Nn.Hidden=Math.Max(1,Math.Min(512,Cfg.Nn.Hidden));// OOM-защита: слои клампятся независимо от источника конфига (UI/sync/import)
+		Cfg.Nn.Hidden2=Math.Max(1,Math.Min(512,Cfg.Nn.Hidden2));
 		if(D.Nn?.W1!=null&&D.Nn.W1b!=null&&D.Nn.W1.GetLength(1)==InDim()&&D.Nn.W1.GetLength(0)==Cfg.Nn.Hidden&&D.Nn.W1b.GetLength(0)==Cfg.Nn.Hidden2) return;		D.Nn=NewNn(Cfg.Nn.Hidden,Cfg.Nn.Hidden2,InDim());		Train();
 		SaveNn();
 	}

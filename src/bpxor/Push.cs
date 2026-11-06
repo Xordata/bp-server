@@ -79,6 +79,7 @@ static class PushStore{
 		}
 	}
 	public static int Count(string uid){ lock(Lk){ return _map.TryGetValue(uid,out List<Sub> l)?l.Count:0; } }
+	public static bool Has(string uid,string endpoint){ lock(Lk){ return _map.TryGetValue(uid,out List<Sub> l)&&l.Any(x=>x.Endpoint==endpoint); } }
 	// доставка всем подпискам юзера; true = хотя бы одна доставлена.
 	// 404/410 (подписка протухла) — подписку чистим.
 	public static async Task<bool> SendToUser(string uid,string title,string body){
@@ -122,6 +123,7 @@ static class SmtpSender{
 		string msg=BuildMessage(cfg,to,subject,body,attName,attCtype,att);
 		string from=string.IsNullOrWhiteSpace(cfg.SmtpFrom)?cfg.SmtpUser:cfg.SmtpFrom;// From не хранится в коде — берётся из конфига
 		string ehlo=from.Contains("@")?from.Substring(from.IndexOf('@')+1):"localhost";
+		if(to.IndexOfAny(new char[]{(char)13,(char)10})>=0||from.IndexOfAny(new char[]{(char)13,(char)10})>=0) throw new Exception("smtp: управляющие символы в адресе");// CRLF-инъекция SMTP-команд
 		using(TcpClient tcp=new TcpClient()){
 			var connect=tcp.ConnectAsync(cfg.SmtpHost,cfg.SmtpPort);
 			if(!connect.Wait(10000))throw new TimeoutException("smtp connect");
@@ -147,6 +149,7 @@ static class SmtpSender{
 	public static string BuildMessage(AuthCfg cfg,string to,string subject,string body,string attName,string attCtype,byte[] att){
 		string enc(string s){ return "=?UTF-8?B?"+Convert.ToBase64String(Encoding.UTF8.GetBytes(s))+"?="; }
 		string from=string.IsNullOrWhiteSpace(cfg.SmtpFrom)?cfg.SmtpUser:cfg.SmtpFrom;
+		to=(to??"").Replace("\r","").Replace("\n",""); subject=(subject??"").Replace("\r","").Replace("\n",""); attName=(attName??"").Replace("\r","").Replace("\n","").Replace("\"","'");
 		StringBuilder msg=new StringBuilder();
 		msg.Append("From: ").Append(from).Append("\r\n");
 		msg.Append("To: ").Append(to).Append("\r\n");
@@ -156,6 +159,8 @@ static class SmtpSender{
 		msg.Append("Message-ID: <"+Guid.NewGuid().ToString("N")+"@"+dom+">\r\n");
 		msg.Append("MIME-Version: 1.0\r\n");
 		string text=(body??"").Replace("\r\n","\n").Replace("\n","\r\n");
+		if(text.StartsWith(".")) text="."+text;// dot-stuffing RFC 5321: строка с точки раньше времени закрыла бы DATA
+		text=text.Replace("\r\n.","\r\n..");
 		if(att==null||att.Length==0){
 			msg.Append("Content-Type: text/plain; charset=utf-8\r\n");
 			msg.Append("Content-Transfer-Encoding: 8bit\r\n\r\n");

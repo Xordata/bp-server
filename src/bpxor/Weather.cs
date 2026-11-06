@@ -144,13 +144,13 @@ partial class Profile
 			} catch(Exception ex){ Log("KpFc: "+ex.Message); }
 
 			// HomeAssistant (опционально): перекрывает указанные датчики
-			if(!string.IsNullOrWhiteSpace(Cfg.Ha.Url)&&!string.IsNullOrWhiteSpace(Cfg.Ha.Token))
+			if(!string.IsNullOrWhiteSpace(Cfg.Ha.Url)&&!string.IsNullOrWhiteSpace(Cfg.Ha.Token)&&HaUrlSafe(Cfg.Ha.Url))
 				foreach(KeyValuePair<string,string> kv in Cfg.Ha.Sensors){
 					if(string.IsNullOrWhiteSpace(kv.Value)) continue;
 					try{
 						HttpRequestMessage req=new HttpRequestMessage(HttpMethod.Get,Cfg.Ha.Url.TrimEnd('/')+"/api/sensor/"+Uri.EscapeDataString(kv.Value)+"/state");
 						req.Headers.Add("Authorization","Bearer "+Cfg.Ha.Token);
-						HttpResponseMessage resp=await Http.SendAsync(req);
+						HttpResponseMessage resp=await HaHttp.SendAsync(req);
 						JObject hj=JObject.Parse(await resp.Content.ReadAsStringAsync());
 						double v=(double)hj["state"];
 						switch(kv.Key){
@@ -166,6 +166,20 @@ partial class Profile
 			MaybePopupForecast();
 			PublishChange();// погода обновилась — вкладки обновят шапку через дельту
 		} catch(Exception ex){ Log("PollWeather: "+ex.Message); } finally{ _weatherBusy=false; }
+	}
+	// SSRF-защита: Ha.Url задаёт пользователь — сервер ходит ТОЛЬКО на публичные http/https без редиректов
+	static readonly System.Net.Http.HttpClient HaHttp=new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(10)};
+	static bool HaUrlSafe(string u){
+		Uri uu;
+		if(!Uri.TryCreate(u,UriKind.Absolute,out uu)) return false;
+		if(uu.Scheme!="http"&&uu.Scheme!="https") return false;
+		try{
+			foreach(System.Net.IPAddress ip in System.Net.Dns.GetHostAddresses(uu.Host)){
+				byte[] o=ip.GetAddressBytes();
+				if(System.Net.IPAddress.IsLoopback(ip)||ip.IsIPv6LinkLocal||(o.Length==4&&(o[0]==10||(o[0]==172&&o[1]>=16&&o[1]<=31)||(o[0]==192&&o[1]==168))||o.Length==16&&(o[0]&0xFE)==0xFC)||ip.IsIPv6SiteLocal||(o.Length==4&&o[0]==169&&o[1]==254)) return false;// loopback/link-local (метаданные облака)/RFC1918
+			}
+		} catch{ return false; }
+		return true;
 	}
 	// symbol_code met.no -> ближайший код WMO (дальше работает общий WmoText)
 	public static int? MetNoWmo(string sym){

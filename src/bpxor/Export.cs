@@ -260,6 +260,8 @@ partial class Profile
 		if(d["noises"] is JArray a3) nd.N=a3.ToObject<List<NoiseEntry>>()??new List<NoiseEntry>();
 		if(d["sleeps"] is JArray a4) nd.S=a4.ToObject<List<SleepEntry>>()??new List<SleepEntry>();
 		if(d["medtakes"] is JArray a5) nd.MedTakes=a5.ToObject<List<MedTakeEntry>>()??new List<MedTakeEntry>();
+		System.Func<string,bool> goodId=s=>{ Guid g; return Guid.TryParse(s,out g); };// Id обязан быть Guid: кривые строки ломают UI (onclick-инъекции)
+		nd.M=nd.M.Where(x=>goodId(x.Id)).ToList(); nd.E=nd.E.Where(x=>goodId(x.Id)).ToList(); nd.N=nd.N.Where(x=>goodId(x.Id)).ToList(); nd.S=nd.S.Where(x=>goodId(x.Id)).ToList(); nd.MedTakes=nd.MedTakes.Where(x=>goodId(x.Id)).ToList();
 		if(d["lastPopup"]!=null&&d["lastPopup"].Type!=JTokenType.Null){
 			DateTime lpd;
 			if(DateTime.TryParse((string)d["lastPopup"],CultureInfo.InvariantCulture,DateTimeStyles.None,out lpd)) nd.LastPopup=lpd;

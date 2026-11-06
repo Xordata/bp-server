@@ -130,10 +130,14 @@ static class RateLimit{
 		return e.Until<=DateTime.Now;
 	}
 	public static void Fail(string key,int failDelaySec){
+		Sweep();
 		_f.AddOrUpdate(key,
 			k=>(1,DateTime.Now.AddSeconds(failDelaySec)),
 			(k,e)=>(e.Fails+1,DateTime.Now.AddSeconds(Math.Min(60,failDelaySec*Math.Pow(2,e.Fails)))));
 	}
 	public static void Ok(string key){ _f.TryRemove(key,out _); }
+	static DateTime lastSweep=DateTime.MinValue;
+	// словарь растёт на каждую уникальную пробу (в т.ч. анонимные Bearer на /api/sync/*) — раз в 10 мин вычищаем протухшее
+	static void Sweep(){ if((DateTime.Now-lastSweep).TotalMinutes<10) return; lastSweep=DateTime.Now; DateTime cut=DateTime.Now.AddHours(-1); foreach(var kv in _f) if(kv.Value.Until<cut) _f.TryRemove(kv.Key,out _); }
 }
 }

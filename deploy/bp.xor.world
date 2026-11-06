@@ -3,6 +3,8 @@
 # сам добавит 443/TLS и редирект.
 
 limit_req_zone $binary_remote_addr zone=bpxor_login:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=bpxor_sync:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=bpxor_api:10m rate=60r/m;
 
 server {
     listen 80;
@@ -10,6 +12,13 @@ server {
     server_name bp.xor.world;
 
     client_max_body_size 20m;   # импорт export/all
+
+    # заголовки безопасности (аудит 2026-11-07): CSP без script-src — SPA использует инлайновые <script>,
+    # поэтому frame-ancestors/object/base — основной эффект; nosniff обязателен
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
 
     access_log /var/log/nginx/bp.access.log combined;
 
@@ -19,6 +28,14 @@ server {
     brotli_types application/json text/css application/javascript image/svg+xml;
     gzip on;
     gzip_types application/json text/css application/javascript image/svg+xml;
+
+    location /api/sync/ {
+        limit_req zone=bpxor_sync burst=20 nodelay;   # десктопный синхрон раз в минуту + запас
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;
+    }
 
     location /api/login {
         limit_req zone=bpxor_login burst=3 nodelay;
@@ -41,6 +58,7 @@ server {
     }
 
     location / {
+        limit_req zone=bpxor_api burst=40 nodelay;   # фоновый шум/перебор — мягкий общий лимит
         proxy_pass http://127.0.0.1:8090;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
