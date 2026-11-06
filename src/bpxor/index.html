@@ -81,6 +81,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
   <span id="pred" title="Прогноз личной модели">модель: —</span>
   <button onclick="stopRing(true);flash('Звук остановлен')" title="Остановить звук вкладки">⏹ звук</button>
   <a href="/help" target="_blank" title="Инструкция" style="color:inherit;text-decoration:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px">📖</a>
+  <button onclick="showLangModal()" title="Язык интерфейса">🌐</button>
   <button id="ring-stop" style="display:none;background:#b71c1c;border-color:#b71c1c;color:#fff" onclick="stopRing(true)">⏹ Стоп будильника</button>
   <span style="flex:1"></span>
   <button onclick="location.href='/q'" title="Быстрый замер">⚡ замер</button>
@@ -326,6 +327,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
 </div>
 <div id="flash"></div>
 
+<script src="/i18n.js"></script>
 <script>
 (function(){
  function ck(n){var m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));return m?m[1]:null;}
@@ -410,10 +412,26 @@ function renderActive(){
 }
 
 /* ---------- состояние (Фаза 5: дельта-синхронизация + SSE вместо полного поллинга) ---------- */
-let tzSent=false,SYNC=null,es=null,pollTimer=null,histShown=200;
+let tzSent=false,SYNC=null,es=null,pollTimer=null,histShown=200,langInit=false;
+const LANGS=[["ru","Русский"],["en","English"],["de","Deutsch"],["fr","Français"],["pt","Português"],["es","Español"],["zh","中文"],["ja","日本語"]];
+function showLangModal(){
+  const cur=(S&&S.cfg&&S.cfg.Lang)||"";
+  openModal("Язык интерфейса / Interface language",
+    `<div class="grid">`+LANGS.map(l=>`<button class="${l[0]===cur?"primary":""}" onclick="setLang('${l[0]}')">${l[1]}</button>`).join("")+`</div>`);
+}
+async function setLang(code){
+  if(S&&S.cfg){ S.cfg.Lang=code; try{await apiPost("/api/config",{Lang:code});}catch(e){} }
+  closeModal();
+  await loadLang(code);
+  renderHeader(); renderActive();
+}
 async function loadState(){
   try{S=await (await fetch("/api/state")).json();}catch(e){return;}
   SYNC=S.sync||null;
+  if(!langInit&&S.cfg){langInit=true;
+    if(!S.cfg.Lang) showLangModal();
+    else loadLang(S.cfg.Lang);
+  }
   S.measLoadedAll=(S.measTotal==null)||(S.measTotal<=(S.measurements||[]).length);
   if(!tzSent&&S.cfg){tzSent=true;try{const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.cfg.Tz!==tz)apiPost("/api/config",{Tz:tz});}catch(e){}}
   renderHeader();
@@ -1070,10 +1088,11 @@ function openCfgUser(){
   openModal("Пользователь",`<div class="grid">
     <label>Дата рождения <input type="date" id="c-dob" style="width:140px" value="${c.Dob||""}"></label>
     <label>Пол <select id="c-sex" style="width:120px"><option value="">не указан</option><option value="m"${c.Sex==="m"?" selected":""}>мужской</option><option value="f"${c.Sex==="f"?" selected":""}>женский</option></select></label>
+    <label>Язык <select id="c-lang" style="width:140px">`+LANGS.map(l=>`<option value="${l[0]}"${(c.Lang||"")===l[0]?" selected":""}>${l[1]}</option>`).join("")+`</select></label>
   </div><p class="mut">Модель использует их как признаки «возраст» (на момент каждого измерения) и «пол»; после изменения модель переобучается автоматически.</p>
   <div class="grid"><button class="primary" onclick="saveCfgUser()">Сохранить</button></div>`);
 }
-function saveCfgUser(){const c=S.cfg;c.Dob=$("c-dob").value;c.Sex=$("c-sex").value;postCfg();}
+function saveCfgUser(){const c=S.cfg;c.Dob=$("c-dob").value;c.Sex=$("c-sex").value;const cl=$("c-lang");if(cl)c.Lang=cl.value;loadLang(c.Lang);postCfg();}
 function openCfgNorm(){
   const c=S.cfg;
   openModal("Норма и оповещение",`<div class="grid">

@@ -186,6 +186,23 @@ crontab -l | grep -c backup-bpdata                               # должно 
 Внешняя синхронизация: rsync/borg забирают `/opt/bpdata/backup/` на внешнее хранилище.
 Пер-profile суточные zip внутри `users/<uid>/backups/` остаются как локальная страховка.
 
+## 11a. Языковые пакеты (i18n)
+
+Интерфейс веба многоязычен (ru базовый + en, de, fr, pt, es, zh, ja). Ключ перевода — сам русский
+текст (gettext-стиль), пакеты — плоские JSON `{"<русский текст>": "<перевод>"}`:
+
+```bash
+mkdir -p /opt/bpdata/lang && chown bpxor:bpxor /opt/bpdata/lang
+# положить en.json de.json fr.json pt.json es.json zh.json ja.json (в репо: deploy/lang/)
+chown bpxor:bpxor /opt/bpdata/lang/*.json
+curl -s -o /dev/null -w "%{http_code}\n" https://bp.example.com/lang/en.json   # 200 (публичный роут)
+```
+
+Пакеты правятся **без пересборки и рестарта** (кэш по mtime файла). Язык профиля — поле `Lang`
+в config.json профиля; не выбран — SPA показывает окно выбора после логина; смена — 🌐 в шапке
+или «Настройки → Пользователь → Язык». Серверные тексты (push/email будильников, письмо экспорта)
+переводятся тем же пакетом по языку профиля. Десктопный BPMonitor — только ru.
+
 ## 12. Проверка установки (снаружи сервера)
 
 ```bash

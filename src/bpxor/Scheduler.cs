@@ -165,6 +165,7 @@ static class AlarmScheduler{
 	}
 
 	static void NotifyUser(string uid,Config cfg,string title,string body,bool push=true){
+		title=LangPacks.Tr(cfg.Lang,title); body=LangPacks.Tr(cfg.Lang,body);// push/email на языке профиля (ru = без изменений)
 		bool pushed=false;
 		if(push){// false = звоним открытой вкладке по SSE — push и email не плодим
 			try{ var t=PushStore.SendToUser(uid,title,body); if(t.Wait(TimeSpan.FromSeconds(25))) pushed=t.Result; }// Wait(таймаут) = «успел ли», НЕ результат; Result берём только после Wait (зависший push-эндпоинт не блокирует цикл)

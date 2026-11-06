@@ -74,6 +74,14 @@ static class Program{
 		// favicon и иконки — публичны (нужны на странице входа); отдаются как есть, PNG браузер определит по содержимому
 		if(req.Method=="GET"&&path=="/favicon.ico"){ await ServeStaticBin(ctx,"icons/icon-192.png","image/png"); return; }
 		if(req.Method=="GET"&&path.StartsWith("/icons/")&&System.Text.RegularExpressions.Regex.IsMatch(path,"^/icons/[a-z0-9-]+[.]png$")){ await ServeStaticBin(ctx,path.Substring(1),"image/png"); return; }
+		// языковые пакеты — публичны (пользовательских данных нет; нужны и для окна выбора после логина)
+		if(req.Method=="GET"&&System.Text.RegularExpressions.Regex.IsMatch(path,"^/lang/[a-z]{2}[.]json$")){
+			string f=Path.Combine(ACfg.DataRoot??"",path.Substring(1));
+			if(!System.IO.File.Exists(f)){ ctx.Response.StatusCode=404; return; }
+			ctx.Response.ContentType="application/json; charset=utf-8";
+			ctx.Response.Headers["Cache-Control"]="public, max-age=300";
+			await ctx.Response.Body.WriteAsync(await File.ReadAllBytesAsync(f)); return;
+		}
 		if(path=="/logout"){ string t0=GetCookie(req,CookieSid); if(t0!=null) Sessions.Destroy(t0); DelCookie(ctx,CookieSid); DelCookie(ctx,CookieCsrf); ctx.Response.Redirect("/login"); return; }
 		// ---- персональный API-токен (синхронизация десктопа, Фаза 7) ----
 		if(path.StartsWith("/api/sync/")){

@@ -28,6 +28,16 @@ partial class Profile
 			try{ f(); Console.WriteLine("PASS  "+name); }
 			catch(Exception ex){ failed++; Console.WriteLine("FAIL  "+name+": "+ex.Message); Console.WriteLine(ex.StackTrace); }
 		};
+		check("i18n: LangPacks.Tr (пакет/fallback/без пакета)",()=>{
+			string dir=Path.Combine(ExeDir,"langroot");
+			Directory.CreateDirectory(Path.Combine(dir,"lang"));
+			File.WriteAllText(Path.Combine(dir,"lang","de.json"),"{\"Сохранено\":\"Gespeichert\",\"Удалить запись?\":\"Eintrag löschen?\"}");
+			if(LangPacks.Tr("de","Сохранено",dir)!="Gespeichert") throw new Exception("перевод не взят из пакета");
+			if(LangPacks.Tr("de","нет в пакете",dir)!="нет в пакете") throw new Exception("unknown key должен падать обратно в ru");
+			if(LangPacks.Tr("ru","Сохранено",dir)!="Сохранено") throw new Exception("ru = без перевода");
+			if(LangPacks.Tr("zz","Сохранено",dir)!="Сохранено") throw new Exception("несуществующий пакет = без перевода");
+			if(LangPacks.Tr("","Сохранено",dir)!="Сохранено") throw new Exception("пустой lang = без перевода");
+		});
 		check("MIME-письмо с вложением (SmtpSender.BuildMessage)",()=>{
 			AuthCfg ac=new AuthCfg{SmtpFrom="bot@example.org"};
 			byte[] att=Encoding.UTF8.GetBytes("a;b;c\r\n1;2;3 мир");
@@ -534,7 +544,7 @@ partial class Profile
 		});
 		check("F1/F2: PWA-статика на месте (q.html, манифест, иконки)",()=>{
 			string bin=AppContext.BaseDirectory;// ExeDir тут — временная песочница selftest, а не каталог бинаря
-			foreach(string f in new string[]{"q.html","help.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"})
+			foreach(string f in new string[]{"q.html","help.html","i18n.js","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"})
 				if(!File.Exists(Path.Combine(bin,f))) throw new Exception("нет "+f+" рядом с бинарём (csproj CopyToOutputDirectory?)");
 			string q=File.ReadAllText(Path.Combine(bin,"q.html"));
 			if(q.IndexOf("q-sys")<0||q.IndexOf("/api/measurement")<0) throw new Exception("q.html неполный");

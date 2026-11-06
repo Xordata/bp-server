@@ -35,6 +35,9 @@
     <None Update="help.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="i18n.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="manifest.webmanifest">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

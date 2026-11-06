@@ -38,6 +38,7 @@ static class HttpApi{
 		app.MapMethods("/q",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"q.html","text/html; charset=utf-8"));
 		app.MapMethods("/help",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"help.html","text/html; charset=utf-8"));
 		app.MapMethods("/manifest.webmanifest",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"manifest.webmanifest","application/manifest+json"));
+		app.MapMethods("/i18n.js",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"i18n.js","text/javascript; charset=utf-8"));
 		app.MapGet("/icons/{file}",(string file)=>{
 			if(file==null||!System.Text.RegularExpressions.Regex.IsMatch(file,"^[a-z0-9-]+[.]png$")) return Results.NotFound();
 			string p=Path.Combine(AppContext.BaseDirectory,"icons",file);
@@ -319,7 +320,7 @@ static class HttpApi{
 					}
 					if(data.Length>8*1024*1024) r=Json(new{ok=false,err="файл слишком большой для отправки"});
 					else{
-						string text="Экспорт дневника АД с bp.xor.world.\r\nФайл: "+fname+"\r\nДата: "+DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+						string text=LangPacks.Tr(p.Cfg.Lang,"Экспорт дневника АД с bp.xor.world.")+"\r\n"+LangPacks.Tr(p.Cfg.Lang,"Файл")+": "+fname+"\r\n"+LangPacks.Tr(p.Cfg.Lang,"Дата")+": "+DateTime.Now.ToString("yyyy-MM-dd HH:mm");
 						try{ SmtpSender.Send(Program.ACfg,to,"BP Monitor: "+fname,text,fname,ctype,data); r=Json(new{ok=true,to=to,file=fname}); }
 						catch(Exception ex){ r=Json(new{ok=false,err="smtp: "+ex.Message}); }
 					}
