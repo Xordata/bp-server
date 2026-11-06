@@ -69,3 +69,8 @@ dotnet publish src\bpxor -c Release -r linux-x64 --self-contained -o U:\AISess\b
 
 VAPID-ключи — `/opt/bpdata/push/vapid.json` (создаются сами), подписки — `push/subs.json`,
 токены синхронизации — `tokens.json` (только SHA256-хэши).
+
+
+## Переводы
+
+Интерфейс переведён на 8 языков (ru/en/de/fr/pt/es/zh/ja): пакеты `deploy/lang/*.json`, страницы справки `lang/help-*.html`, тексты EULA. Перевод выполнен ИИ-ассистентом Hermes Agent (модель `halogen-qwen3.8-flash-next`), вычитка и приёмка — владельцем проекта. Пользовательские данные (названия лекарств, типы шумов, заметки) не переводятся принципиально.
