@@ -428,7 +428,7 @@ async function loadState(){
   SYNC=S.sync||null;
   if(!langInit&&S.cfg){langInit=true;
     if(!S.cfg.Lang) showLangModal();
-    else loadLang(S.cfg.Lang);
+    else await loadLang(S.cfg.Lang);// ЖДЁМ пакет до первого renderHeader/renderActive — иначе tr() вернёт ru (гонка)
   }
   S.measLoadedAll=(S.measTotal==null)||(S.measTotal<=(S.measurements||[]).length);
   if(!tzSent&&S.cfg){tzSent=true;try{const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.cfg.Tz!==tz)apiPost("/api/config",{Tz:tz});}catch(e){}}
