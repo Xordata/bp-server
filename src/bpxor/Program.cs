@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
@@ -42,6 +43,9 @@ static class Program{
 		JobGate.Max=Math.Max(1,ACfg.MaxConcurrentJobs);
 
 		var builder=Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder(new string[0]);
+		// SSE (/api/events) держит запросы открытыми — дефолтный ShutdownTimeout 30 с = «рестарт висит полминуты»;
+		// принудительно обрываем соединения через 3 с (данные пишутся синхронно, терять нечего)
+		builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(o=>o.ShutdownTimeout=TimeSpan.FromSeconds(3));
 		builder.Logging.ClearProviders();
 		builder.Logging.AddSimpleConsole(o=>{o.SingleLine=true;o.TimestampFormat="HH:mm:ss ";});
 		builder.WebHost.ConfigureKestrel(k=>{

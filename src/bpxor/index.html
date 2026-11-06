@@ -1299,13 +1299,16 @@ async function renderPush(){
   try{const reg=await navigator.serviceWorker.getRegistration();subbed=!!(reg&&await reg.pushManager.getSubscription());}catch(e){}
   const perm=("Notification" in window)?Notification.permission:"нет API";
   const btn=$("push-btn");
-  if(subbed||st&&st.subs>0){
+  // состояние кнопки — ТОЛЬКО по подписке этого браузера; счётчик аккаунта показываем справочно,
+  // иначе на втором устройстве навсегда висит «Отключить» и «включить» невозможно
+  if(subbed){
     btn.textContent="🔕 Отключить push на этом браузере";btn.onclick=pushOff;
-    el.textContent=st?("подписок на сервере: "+st.subs+" · разрешение браузера: "+perm+(st.email?" · email-фолбэк настроен":" · email-фолбэк выключен (нужен бот на сервере)")):"";
   }else{
     btn.textContent="🔔 Включить push-уведомления";btn.onclick=pushToggle;
-    el.textContent=(st&&st.vapid?"VAPID готов":"VAPID не настроен")+" · разрешение браузера: "+perm;
   }
+  el.textContent=(st?(st.vapid?("подписок на сервере (все устройства): "+st.subs):"VAPID не настроен"):"")
+    +" · разрешение браузера: "+perm
+    +(st&&st.email?" · email-фолбэк настроен":"");
 }
 async function pushTest(){flash("Тест push: отправляю…");const j=await apiPost("/api/push/test",{});
   flash(j.ok?("Push отправлен всем подпискам (всего: "+j.subs+")"):("Не доставлено: "+(j.err||"?")),!!j.ok,6000);}
