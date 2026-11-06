@@ -6,7 +6,8 @@
 аккаунт создаётся автоматически при первом входе.
 
 Документация: [PLAN.md](PLAN.md) — план/история по фазам · [TODO.md](TODO.md) — backlog ·
-[deploy/README-deploy.md](deploy/README-deploy.md) — установка и редиплой ·
+[DEPLOY.md](DEPLOY.md) — **полная установка на любой чистый сервер** ·
+[deploy/README-deploy.md](deploy/README-deploy.md) — установка/редиплой конкретного прода bp.xor.world ·
 инструкция для пользователя — `help.html` (общая с десктопом, на проде `/help`).
 
 ## Архитектура
