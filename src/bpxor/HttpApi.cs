@@ -36,6 +36,7 @@ static class HttpApi{
 		});
 		// F1/F2: PWA-манифест, страница быстрого замера, иконки (все за сессией — AuthGate)
 		app.MapMethods("/q",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"q.html","text/html; charset=utf-8"));
+		app.MapMethods("/help",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"help.html","text/html; charset=utf-8"));
 		app.MapMethods("/manifest.webmanifest",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>StaticText(ctx,"manifest.webmanifest","application/manifest+json"));
 		app.MapGet("/icons/{file}",(string file)=>{
 			if(file==null||!System.Text.RegularExpressions.Regex.IsMatch(file,"^[a-z0-9-]+[.]png$")) return Results.NotFound();

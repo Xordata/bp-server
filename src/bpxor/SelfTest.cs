@@ -521,7 +521,7 @@ partial class Profile
 		});
 		check("F1/F2: PWA-статика на месте (q.html, манифест, иконки)",()=>{
 			string bin=AppContext.BaseDirectory;// ExeDir тут — временная песочница selftest, а не каталог бинаря
-			foreach(string f in new string[]{"q.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"})
+			foreach(string f in new string[]{"q.html","help.html","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-512.png","icons/apple-touch-icon.png"})
 				if(!File.Exists(Path.Combine(bin,f))) throw new Exception("нет "+f+" рядом с бинарём (csproj CopyToOutputDirectory?)");
 			string q=File.ReadAllText(Path.Combine(bin,"q.html"));
 			if(q.IndexOf("q-sys")<0||q.IndexOf("/api/measurement")<0) throw new Exception("q.html неполный");

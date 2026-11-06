@@ -1,11 +1,35 @@
 # Порядок развёртывания (root на <VPS-HOST>)
 
-## 0. Статус на 2026-11-05
+## 0. Статус
 - [x] swap 2G + fstab
-- [x] brotli-модули nginx
-- [x] DNS bp.xor.world → <VPS-IP> (проверено через 1.1.1.1/8.8.8.8)
-- [x] бот-аккаунт bpxor@example.org создан в maddy (пароль в U:\AISess\secrets\bpxor.config.json — вне репо)
-- [ ] шаги ниже
+- [x] brotli-модули nginx, HTTP/2 (`listen 443 ssl http2`)
+- [x] DNS bp.xor.world → <VPS-IP>
+- [x] бот-аккаунт bpxor@example.org в maddy (пароль в U:\AISess\secrets\bpxor.config.json — вне репо)
+- [x] всё ниже выполнено, прод живой с 2026-11-05 (systemd `bpxor.service`, данные /opt/bpdata)
+
+## 0.5. Штучный редиплой (обычный путь обновления)
+
+С dev-машины (Windows, git-bash). SSH на нестандартном порту <SSH-PORT>; наружные проверки — только curl
+(python urllib TLS-handshake к серверу висит). Пакет = tar **только изменённых файлов** из `publish/linux-x64`
+(весь publish — 100 МБ, не гонять):
+
+```bash
+cd /u/AISess/bp.xor.world/publish/linux-x64
+tar czf /z/Temp/bpxor-update.tar.gz bpxor.dll index.html login.html help.html q.html sw.js manifest.webmanifest icons BpMonitorSetup.exe   # состав по факту изменённого
+scp -P <SSH-PORT> /z/Temp/bpxor-update.tar.gz root@<VPS-IP>:/root/
+```
+
+На сервере:
+```bash
+tar xzf /root/bpxor-update.tar.gz -C /usr/local/bin/bpxor
+chown -R bpxor:bpxor /usr/local/bin/bpxor
+systemctl restart bpxor        # 3–4 с (HostOptions.ShutdownTimeout=3)
+sleep 2                        # гонка рестарта: 502 сразу после restart — норма
+curl -s -o /dev/null -w "%{http_code}\n" https://bp.xor.world/login   # ожидаем 200
+# если 502 не прошёл сам: journalctl -u bpxor -n 40 --no-pager; ss -tlnp | grep 8090
+```
+Редкие, но нужные вещи: `BpMonitorSetup.exe` — раздать при каждом релизе десктопа (отдаётся GET /download, рестарт не нужен);
+`bpxor.config.json` меняется отдельно (chmod 600, рестарт обязателен).
 
 ## 1. Пользователь и каталог данных
 ```bash

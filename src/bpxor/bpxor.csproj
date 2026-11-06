@@ -32,6 +32,9 @@
     <None Update="q.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="help.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="manifest.webmanifest">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
