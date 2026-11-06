@@ -74,6 +74,14 @@ static class Program{
 		// favicon и иконки — публичны (нужны на странице входа); отдаются как есть, PNG браузер определит по содержимому
 		if(req.Method=="GET"&&path=="/favicon.ico"){ await ServeStaticBin(ctx,"icons/icon-192.png","image/png"); return; }
 		if(req.Method=="GET"&&path.StartsWith("/icons/")&&System.Text.RegularExpressions.Regex.IsMatch(path,"^/icons/[a-z0-9-]+[.]png$")){ await ServeStaticBin(ctx,path.Substring(1),"image/png"); return; }
+		// многоязычная инструкция: /help/<code> -> <data>/lang/help-<code>.html (публично)
+		if(req.Method=="GET"&&System.Text.RegularExpressions.Regex.IsMatch(path,"^/help/[a-z]{2}$")){
+			string fh=Path.Combine(ACfg.DataRoot??"","lang","help-"+path.Substring(6)+".html");
+			if(!System.IO.File.Exists(fh)){ ctx.Response.StatusCode=404; return; }
+			ctx.Response.ContentType="text/html; charset=utf-8";
+			ctx.Response.Headers["Cache-Control"]="public, max-age=3600";
+			await ctx.Response.Body.WriteAsync(await File.ReadAllBytesAsync(fh)); return;
+		}
 		// EULA — публично (тексты соглашения, данных нет)
 		if(req.Method=="GET"&&path=="/eula"){
 			string fe=Path.Combine(ACfg.DataRoot??"","lang","eula.json");
