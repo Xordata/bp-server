@@ -28,9 +28,9 @@ public class AuthCfg{
 	public string DataRoot="";// заполняет Main (VAPID/PushStore)
 	public string SmtpHost="127.0.0.1";// maddy submission на этом же сервере
 	public int SmtpPort=587;
-	public string SmtpUser="";// бот bpxor@example.org; пусто = email-фолбэк выключен
+	public string SmtpUser="";// адрес ящика-бота (только в bpxor.config.json рядом с exe); пусто = email-фолбэк выключен
 	public string SmtpPass="";
-	public string SmtpFrom="bpxor@example.org";
+	public string SmtpFrom="";// пусто = From берётся из SmtpUser (адрес бота не хранится в коде)
 	public string WxSource="openmeteo";// "metno" — api.met.no (open-meteo лежит на Hetzner, который режет входящие с некоторых хостинговых ASN)
 }
 

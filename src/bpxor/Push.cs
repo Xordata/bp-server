@@ -120,19 +120,21 @@ static class SmtpSender{
 	// attName/attCtype/att — вложение («экспорт в почту»); null = текстовое письмо
 	public static void Send(AuthCfg cfg,string to,string subject,string body,string attName,string attCtype,byte[] att){
 		string msg=BuildMessage(cfg,to,subject,body,attName,attCtype,att);
+		string from=string.IsNullOrWhiteSpace(cfg.SmtpFrom)?cfg.SmtpUser:cfg.SmtpFrom;// From не хранится в коде — берётся из конфига
+		string ehlo=from.Contains("@")?from.Substring(from.IndexOf('@')+1):"localhost";
 		using(TcpClient tcp=new TcpClient()){
 			var connect=tcp.ConnectAsync(cfg.SmtpHost,cfg.SmtpPort);
 			if(!connect.Wait(10000))throw new TimeoutException("smtp connect");
 			Stream io=tcp.GetStream();
 			Read(io);// 220
-			Cmd(io,"EHLO <домен из конфига>");
+			Cmd(io,"EHLO "+ehlo);
 			Cmd(io,"STARTTLS");
 			var ssl=new SslStream(io,false,(s,c,ch,e)=>true);// loopback — принимаем любой сертификат (как IMAP-probe)
 			ssl.AuthenticateAsClient(cfg.SmtpHost);io=ssl;
-			Cmd(io,"EHLO <домен из конфига>");
+			Cmd(io,"EHLO "+ehlo);
 			Cmd(io,"AUTH LOGIN "+Convert.ToBase64String(Encoding.UTF8.GetBytes(cfg.SmtpUser)));
 			Cmd(io,Convert.ToBase64String(Encoding.UTF8.GetBytes(cfg.SmtpPass)));
-			Cmd(io,"MAIL FROM:<"+cfg.SmtpFrom+">");
+			Cmd(io,"MAIL FROM:<"+from+">");
 			Cmd(io,"RCPT TO:<"+to+">");
 			Cmd(io,"DATA");
 			byte[] b=Encoding.UTF8.GetBytes(msg);
@@ -144,12 +146,13 @@ static class SmtpSender{
 	// сборка письма отдельно от SMTP-сессии — проверяется selftest'ом без сети
 	public static string BuildMessage(AuthCfg cfg,string to,string subject,string body,string attName,string attCtype,byte[] att){
 		string enc(string s){ return "=?UTF-8?B?"+Convert.ToBase64String(Encoding.UTF8.GetBytes(s))+"?="; }
+		string from=string.IsNullOrWhiteSpace(cfg.SmtpFrom)?cfg.SmtpUser:cfg.SmtpFrom;
 		StringBuilder msg=new StringBuilder();
-		msg.Append("From: ").Append(cfg.SmtpFrom).Append("\r\n");
+		msg.Append("From: ").Append(from).Append("\r\n");
 		msg.Append("To: ").Append(to).Append("\r\n");
 		msg.Append("Subject: ").Append(enc(subject)).Append("\r\n");
 		msg.Append("Date: ").Append(DateTime.UtcNow.ToString("r",CultureInfo.InvariantCulture)).Append("\r\n");
-		string dom=cfg.SmtpFrom.Contains("@")?cfg.SmtpFrom.Substring(cfg.SmtpFrom.IndexOf('@')+1):"localhost";
+		string dom=from.Contains("@")?from.Substring(from.IndexOf('@')+1):"localhost";
 		msg.Append("Message-ID: <"+Guid.NewGuid().ToString("N")+"@"+dom+">\r\n");
 		msg.Append("MIME-Version: 1.0\r\n");
 		string text=(body??"").Replace("\r\n","\n").Replace("\n","\r\n");
