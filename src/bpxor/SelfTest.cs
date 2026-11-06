@@ -28,6 +28,19 @@ partial class Profile
 			try{ f(); Console.WriteLine("PASS  "+name); }
 			catch(Exception ex){ failed++; Console.WriteLine("FAIL  "+name+": "+ex.Message); Console.WriteLine(ex.StackTrace); }
 		};
+		check("MIME-письмо с вложением (SmtpSender.BuildMessage)",()=>{
+			AuthCfg ac=new AuthCfg{SmtpFrom="bot@example.org"};
+			byte[] att=Encoding.UTF8.GetBytes("a;b;c\r\n1;2;3 мир");
+			string m=SmtpSender.BuildMessage(ac,"user@example.org","Отчёт","тело\r\nстрока2","bp_doctor.csv","text/csv",att);
+			if(!m.Contains("multipart/mixed; boundary=")) throw new Exception("нет boundary");
+			if(!m.Contains("Content-Disposition: attachment; filename=\"bp_doctor.csv\"")) throw new Exception("нет заголовка вложения");
+			if(!m.Contains(Convert.ToBase64String(att))) throw new Exception("base64 вложения не найден");
+			if(!m.Contains("Subject: =?UTF-8?B?")) throw new Exception("тема не закодирована");
+			if(!m.EndsWith("--\r\n.\r\n")) throw new Exception("нет терминатора DATA");
+			string plain=SmtpSender.BuildMessage(ac,"u@e.org","s","b",null,null,null);
+			if(plain.Contains("multipart")) throw new Exception("текстовое письмо не должно быть multipart");
+			if(!plain.EndsWith("\r\n.\r\n")) throw new Exception("нет терминатора DATA (plain)");
+		});
 		CultureInfo savedCulture=Thread.CurrentThread.CurrentCulture;
 		check("FireToday: daily",()=>{
 			if(!AlarmScheduler.FireToday(new AlarmDef{Mode="daily"},DateTime.Now)) throw new Exception("daily должен срабатывать");

@@ -106,8 +106,20 @@ static class PushStore{
 }
 
 // Минималистичный SMTP-клиент (submission 587, STARTTLS) — как MaddyAuth, без новых зависимостей.
+// частотный ограничитель «экспорта в почту» (uid -> метки последних отправок, скользящее окно)
+static class MailRate{
+	static readonly System.Collections.Concurrent.ConcurrentDictionary<string,List<DateTime>> _hits=new System.Collections.Concurrent.ConcurrentDictionary<string,List<DateTime>>();
+	public static bool Allow(string uid,int max,int windowSec){
+		DateTime now=DateTime.Now;
+		List<DateTime> list=_hits.GetOrAdd(uid,_=>new List<DateTime>());
+		lock(list){ list.RemoveAll(t=>(now-t).TotalSeconds>windowSec); if(list.Count>=max) return false; list.Add(now); return true; }
+	}
+}
 static class SmtpSender{
-	public static void Send(AuthCfg cfg,string to,string subject,string body){
+	public static void Send(AuthCfg cfg,string to,string subject,string body){ Send(cfg,to,subject,body,null,null,null); }
+	// attName/attCtype/att — вложение («экспорт в почту»); null = текстовое письмо
+	public static void Send(AuthCfg cfg,string to,string subject,string body,string attName,string attCtype,byte[] att){
+		string msg=BuildMessage(cfg,to,subject,body,attName,attCtype,att);
 		using(TcpClient tcp=new TcpClient()){
 			var connect=tcp.ConnectAsync(cfg.SmtpHost,cfg.SmtpPort);
 			if(!connect.Wait(10000))throw new TimeoutException("smtp connect");
@@ -123,21 +135,44 @@ static class SmtpSender{
 			Cmd(io,"MAIL FROM:<"+cfg.SmtpFrom+">");
 			Cmd(io,"RCPT TO:<"+to+">");
 			Cmd(io,"DATA");
-			string enc(string s){ return "=?UTF-8?B?"+Convert.ToBase64String(Encoding.UTF8.GetBytes(s))+"?="; }
-			StringBuilder msg=new StringBuilder();
-			msg.Append("From: ").Append(cfg.SmtpFrom).Append("\r\n");
-			msg.Append("To: ").Append(to).Append("\r\n");
-			msg.Append("Subject: ").Append(enc(subject)).Append("\r\n");
-			msg.Append("Date: ").Append(DateTime.UtcNow.ToString("r",CultureInfo.InvariantCulture)).Append("\r\n");
-			msg.Append("MIME-Version: 1.0\r\n");
-			msg.Append("Content-Type: text/plain; charset=utf-8\r\n");
-			msg.Append("Content-Transfer-Encoding: 8bit\r\n\r\n");
-			msg.Append((body??"").Replace("\r\n","\n").Replace("\n","\r\n")).Append("\r\n.\r\n");
-			byte[] b=Encoding.UTF8.GetBytes(msg.ToString());
+			byte[] b=Encoding.UTF8.GetBytes(msg);
 			io.Write(b,0,b.Length);io.Flush();
 			Read(io);// 250 queued
 			try{ Cmd(io,"QUIT"); }catch{}
 		}
+	}
+	// сборка письма отдельно от SMTP-сессии — проверяется selftest'ом без сети
+	public static string BuildMessage(AuthCfg cfg,string to,string subject,string body,string attName,string attCtype,byte[] att){
+		string enc(string s){ return "=?UTF-8?B?"+Convert.ToBase64String(Encoding.UTF8.GetBytes(s))+"?="; }
+		StringBuilder msg=new StringBuilder();
+		msg.Append("From: ").Append(cfg.SmtpFrom).Append("\r\n");
+		msg.Append("To: ").Append(to).Append("\r\n");
+		msg.Append("Subject: ").Append(enc(subject)).Append("\r\n");
+		msg.Append("Date: ").Append(DateTime.UtcNow.ToString("r",CultureInfo.InvariantCulture)).Append("\r\n");
+		string dom=cfg.SmtpFrom.Contains("@")?cfg.SmtpFrom.Substring(cfg.SmtpFrom.IndexOf('@')+1):"localhost";
+		msg.Append("Message-ID: <"+Guid.NewGuid().ToString("N")+"@"+dom+">\r\n");
+		msg.Append("MIME-Version: 1.0\r\n");
+		string text=(body??"").Replace("\r\n","\n").Replace("\n","\r\n");
+		if(att==null||att.Length==0){
+			msg.Append("Content-Type: text/plain; charset=utf-8\r\n");
+			msg.Append("Content-Transfer-Encoding: 8bit\r\n\r\n");
+			msg.Append(text).Append("\r\n.\r\n");
+		} else {
+			string bd="bpxor"+Guid.NewGuid().ToString("N").Substring(0,16);
+			msg.Append("Content-Type: multipart/mixed; boundary=\""+bd+"\"\r\n\r\n");
+			msg.Append("--").Append(bd).Append("\r\n");
+			msg.Append("Content-Type: text/plain; charset=utf-8\r\n");
+			msg.Append("Content-Transfer-Encoding: 8bit\r\n\r\n");
+			msg.Append(text).Append("\r\n");
+			msg.Append("--").Append(bd).Append("\r\n");
+			msg.Append("Content-Type: ").Append(attCtype??"application/octet-stream").Append("; filename=\"").Append(attName).Append("\"\r\n");
+			msg.Append("Content-Transfer-Encoding: base64\r\n");
+			msg.Append("Content-Disposition: attachment; filename=\"").Append(attName).Append("\"\r\n\r\n");
+			string b64=Convert.ToBase64String(att);
+			for(int i=0;i<b64.Length;i+=76) msg.Append(b64,i,Math.Min(76,b64.Length-i)).Append("\r\n");
+			msg.Append("--").Append(bd).Append("--\r\n.\r\n");
+		}
+		return msg.ToString();
 	}
 	static string Read(Stream io){
 		StringBuilder sb=new StringBuilder();

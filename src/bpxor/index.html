@@ -125,6 +125,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
         <button class="primary" onclick="doExport('doctor')">Таблица для врача</button>
         <button onclick="doExport('rows')">По строкам</button>
         <button onclick="doExport('days')">По дням</button>
+        <button onclick="mailExport('report','doctor')" title="отправить выбранный формат на почту аккаунта">📧 На почту</button>
         <span class="mut">экспортируется текущий фильтр</span>
       </div>
     </section>
@@ -308,6 +309,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
       <h3>Перенос на другой ПК</h3>
       <div class="grid">
         <button onclick="exportAll()" title="единый JSON: настройки + все данные + модель + справочник ФК">⬇ Экспорт всего</button>
+        <button onclick="mailExport('all')" title="единый JSON на почту аккаунта">📧 Экспорт всего на почту</button>
         <input type="file" id="imp-file" accept=".json,application/json">
         <button onclick="importAll()" class="primary">⬆ Импорт из файла</button>
         <span class="mut">импорт заменит все текущие данные (перед ним создастся архив в backups\\)</span>
@@ -679,6 +681,15 @@ function drawBp(l){
     lx+=x.measureText(name).width+34;
   }
   $("g-hint").textContent="красным пунктиром — норма сис "+norm;
+}
+async function mailExport(what,kind){
+  const payload=what=="all"?{what:"all"}:Object.assign({},filter,{what:"report",kind,fmt:$("ex-fmt").value});
+  flash("Отправляю на почту…");
+  try{
+    const r=await fetch("/api/export/email",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const j=await r.json();
+    flash(j.ok?("Отправлено на "+j.to):(j.err||"Ошибка отправки"),!!j.ok);
+  }catch(e){ flash("Ошибка отправки",false); }
 }
 async function doExport(kind){
   const r=await fetch("/api/export",{method:"POST",headers:{"Content-Type":"application/json"},

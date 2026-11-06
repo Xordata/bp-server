@@ -293,6 +293,40 @@ static class HttpApi{
 			byte[] data=p.BuildExport(jo,kind,fmt,out string fname,out string ctype);
 			return File(data,ctype,fname);
 		}));
+		// «Экспорт в почту»: файл собирается под lock(Sync), SMTP-сессия — вне лока профиля
+		// (письмо через maddy на loopback обычно <1 с, но висячий SMTP не должен блокировать профиль).
+		app.MapPost("/api/export/email",async ctx=>{
+			IResult r;
+			try{
+				string body=await ReadBody(ctx.Request);
+				JObject jo; try{ jo=body.Length>0?JObject.Parse(body):new JObject(); }catch{ jo=new JObject(); }
+				Profile p=P(ctx);
+				string what=jo["what"]!=null?jo["what"].ToString():"report";
+				string to=((string)jo["to"]??"").Trim();
+				if(to=="") to=string.IsNullOrWhiteSpace(p.Cfg.EmailTo)?p.Uid:p.Cfg.EmailTo;
+				if(!System.Text.RegularExpressions.Regex.IsMatch(to,"^[^@\\s]+@[^@\\s.]+(\\.[^@\\s.]+)+$")) r=Json(new{ok=false,err="некорректный адрес получателя"});
+				else if(Program.ACfg.SmtpUser=="") r=Json(new{ok=false,err="SMTP-бот на сервере не настроен"});
+				else if(!MailRate.Allow(p.Uid,6,3600)) r=Json(new{ok=false,err="не чаще 6 писем в час — подождите"});
+				else{
+					byte[] data;string fname,ctype;
+					lock(p.Sync){
+						if(what=="all"){ data=Encoding.UTF8.GetBytes(p.ExportAll().ToString(Formatting.None)); fname="bpmonitor-export-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+".json"; ctype="application/json"; }
+						else{
+							string kind=jo["kind"]!=null?jo["kind"].ToString():"doctor";
+							string fmt=jo["fmt"]!=null?jo["fmt"].ToString():"csv";
+							data=p.BuildExport(jo,kind,fmt,out fname,out ctype);
+						}
+					}
+					if(data.Length>8*1024*1024) r=Json(new{ok=false,err="файл слишком большой для отправки"});
+					else{
+						string text="Экспорт дневника АД с bp.xor.world.\r\nФайл: "+fname+"\r\nДата: "+DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+						try{ SmtpSender.Send(Program.ACfg,to,"BP Monitor: "+fname,text,fname,ctype,data); r=Json(new{ok=true,to=to,file=fname}); }
+						catch(Exception ex){ r=Json(new{ok=false,err="smtp: "+ex.Message}); }
+					}
+				}
+			} catch(Exception ex){ r=Err(ex.Message); }
+			await r.ExecuteAsync(ctx);
+		});
 		// ---------- Фаза 4: Web Push + состояние будильника ----------
 		// установщик десктопной версии: BpMonitorSetup.exe кладётся рядом с бинарём bpxor (сборка — BPMonitor\deploy\BpMonitor.iss)
 		// AuthGate незнакомые GET пропускает (механика статики) — гейт сессии здесь
