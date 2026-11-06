@@ -281,7 +281,7 @@
  "лёгкая усталость": "slight tiredness",
  "лёгкое удовлетворение": "mild satisfaction",
  "мин будильник:": "min alarm:",
- "мм": "mm",
+ "мм": "mmHg",
  "модель: —": "model: —",
  "мужской": "male",
  "название лекарства": "medication name",
@@ -366,5 +366,10 @@
  "📲 Установить на телефон": "📲 Install on phone",
  "🔔 Включить push-уведомления": "🔔 Enable push notifications",
  "🔕 Отключить push на этом браузере": "🔕 Disable push on this browser",
- "🩺 Дневник давления": "🩺 Blood Pressure Diary"
+ "🩺 Дневник давления": "🩺 Blood Pressure Diary",
+ "Давл": "Press",
+ "Влажн": "Hum",
+ "Kp прогноз": "Kp forecast",
+ "модель:": "model:",
+ "неизвестно": "unknown"
 }

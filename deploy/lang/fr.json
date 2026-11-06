@@ -281,7 +281,7 @@
  "лёгкая усталость": "légère fatigue",
  "лёгкое удовлетворение": "léger contentement",
  "мин будильник:": "min rappel :",
- "мм": "mm",
+ "мм": "mmHg",
  "модель: —": "modèle : —",
  "мужской": "masculin",
  "название лекарства": "nom du médicament",
@@ -366,5 +366,10 @@
  "📲 Установить на телефон": "📲 Installer sur téléphone",
  "🔔 Включить push-уведомления": "🔔 Activer les notifications push",
  "🔕 Отключить push на этом браузере": "🔕 Désactiver push sur ce navigateur",
- "🩺 Дневник давления": "🩺 Journal de tension"
+ "🩺 Дневник давления": "🩺 Journal de tension",
+ "Давл": "Pression",
+ "Влажн": "Humidité",
+ "Kp прогноз": "Prévision Kp",
+ "модель:": "modèle :",
+ "неизвестно": "inconnu"
 }

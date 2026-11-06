@@ -421,9 +421,7 @@ function showLangModal(){
 }
 async function setLang(code){
   if(S&&S.cfg){ S.cfg.Lang=code; try{await apiPost("/api/config",{Lang:code});}catch(e){} }
-  closeModal();
-  await loadLang(code);
-  renderHeader(); renderActive();
+  location.reload();// полный F5: надёжнее live-переобхода — весь UI перерисовывается уже с пакетом
 }
 async function loadState(){
   try{S=await (await fetch("/api/state")).json();}catch(e){return;}
@@ -483,17 +481,17 @@ connectEvents();
 function renderHeader(){
   const w=S.weather||{};
   $("wx").innerHTML=
-    (w.PressMm!=null?`<span>Давл ${Math.round(w.PressMm)} мм</span>`:"")+
+    (w.PressMm!=null?`<span>${tr("Давл")} ${Math.round(w.PressMm)} ${tr("мм")}</span>`:"")+
     (w.TempC!=null?`<span>${w.TempC.toFixed(1)} °C</span>`:"")+
-    (w.Hum!=null?`<span>Влажн ${Math.round(w.Hum)} %</span>`:"")+
+    (w.Hum!=null?`<span>${tr("Влажн")} ${Math.round(w.Hum)} %</span>`:"")+
     (w.Kp!=null?`<span class="${w.Kp>=50?"warn":""}">Kp ${(w.Kp/10).toFixed(1)}</span>`:"")+
-    (w.kpForecast>=5?`<span class="warn" title="прогноз NOAA SWPC на ближайшие сутки">⚡Kp прогноз ${w.kpForecast.toFixed(1)}</span>`:"")+
+    (w.kpForecast>=5?`<span class="warn" title="прогноз NOAA SWPC на ближайшие сутки">⚡${tr("Kp прогноз")} ${w.kpForecast.toFixed(1)}</span>`:"")+
     (w.Text?`<span>${esc(w.Text)}</span>`:"")+
     (w.Updated?`<span class="up">(${fhm(w.Updated)})</span>`:"")+
     `<button onclick="refreshWx()" title="Обновить погоду">⟳ погода</button>`;
   const p=S.nn&&S.nn.predict, pe=$("pred");
   if(p){
-    pe.textContent=`модель: ${Math.round(p.sys)} / ${Math.round(p.dia)}`;
+    pe.textContent=`${tr("модель:")} ${Math.round(p.sys)} / ${Math.round(p.dia)}`;
     pe.classList.toggle("bad",p.sys>S.cfg.NormSys||p.dia>S.cfg.NormDia);
   }
 }
@@ -698,7 +696,7 @@ function drawBp(l){
     x.fillStyle=col;x.fillRect(lx,T+2,10,3);x.fillStyle=cssv("--legend");x.fillText(name,lx+14,T+7);
     lx+=x.measureText(name).width+34;
   }
-  $("g-hint").textContent="красным пунктиром — норма сис "+norm;
+  $("g-hint").textContent=tr("красным пунктиром — норма сис")+" "+norm;
 }
 async function mailExport(what,kind){
   const payload=what=="all"?{what:"all"}:Object.assign({},filter,{what:"report",kind,fmt:$("ex-fmt").value});
