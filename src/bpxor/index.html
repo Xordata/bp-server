@@ -52,6 +52,15 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
 .fc b{font-size:13px}
 .fc.bad{background:var(--warn-bg);border-color:var(--warn-bd);color:var(--warn)}
 .fc .up{color:var(--mut);font-size:11px}
+#eulabg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;justify-content:center;align-items:flex-start;padding:3vh 10px;overflow:auto}
+#eulabg.on{display:flex}
+#eulabox{background:var(--card);border:1px solid var(--border);border-radius:10px;max-width:1100px;width:100%;padding:16px}
+.eula-cols{display:flex;gap:14px}
+.eula-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.eula-col h4{margin:0 0 6px}
+.eula-col pre{white-space:pre-wrap;font:13px Tahoma;line-height:1.45;max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:10px;margin:0}
+.eula-col label{margin-top:8px;font-weight:bold;cursor:pointer}
+@media(max-width:760px){.eula-cols{flex-direction:column}}
 #mbg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;justify-content:center;align-items:flex-start;padding:6vh 10px 10px;overflow:auto}
 #mbg.on{display:flex}
 #mbox{background:var(--card);border:1px solid var(--bd);border-radius:8px;max-width:680px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35)}
@@ -278,7 +287,7 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
         <button onclick="openCfgNorm()">Изменить</button>
         <label><input type="checkbox" id="c-auto" onchange="toggleAuto(this.checked)"> Автозапуск при старте Windows</label>
       </div>
-      <p class="mut" style="margin:6px 0 0">Автозапуск (реестр HKCU\...\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка действует на десктопный клиент, если он подключён и на нём включена синхронизация.</p>
+      <p class="mut" style="margin:6px 0 0">Автозапуск (реестр HKCU\...\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».</p>
     </section>
     <section>
       <h3>HomeAssistant (опционально)</h3>
@@ -319,6 +328,13 @@ canvas{max-width:100%;border:1px solid var(--bd);background:var(--canvas)}
   </div>
 
 </main>
+<div id="eulabg"><div id="eulabox">
+  <div class="eula-cols">
+    <div class="eula-col"><h4>English</h4><pre id="eula-en"></pre><label><input type="checkbox" id="eula-c1" onchange="eulaChk()"> I have read and accept the agreement, including the liability waiver (item 5)</label></div>
+    <div class="eula-col"><h4 id="eula-rname"></h4><pre id="eula-r"></pre><label><input type="checkbox" id="eula-c2" onchange="eulaChk()"> <span id="eula-l2t"></span></label></div>
+  </div>
+  <div style="margin-top:12px;text-align:right"><button class="primary" id="eula-ok" disabled onclick="eulaAccept()">Accept / Принять</button></div>
+</div></div>
 <div id="mbg">
   <div id="mbox">
     <div id="mhead"><b id="mtitle"></b><button onclick="closeModal()" title="Закрыть (Esc)">✕</button></div>
@@ -412,7 +428,25 @@ function renderActive(){
 }
 
 /* ---------- состояние (Фаза 5: дельта-синхронизация + SSE вместо полного поллинга) ---------- */
-let tzSent=false,SYNC=null,es=null,pollTimer=null,histShown=200,langInit=false;
+let tzSent=false,SYNC=null,es=null,pollTimer=null,histShown=200,langInit=false,eulaChecked=false,eulaData=null;
+async function checkEula(){
+  try{eulaData=await (await fetch("/eula")).json();}catch(e){return;}
+  if((S.cfg.EulaVer||0)>=eulaData.version)return;
+  const lang=(window.I18N&&I18N.lang)||"ru";
+  const names={ru:"Русский",en:"English",de:"Deutsch",fr:"Français",pt:"Português",es:"Español",zh:"中文",ja:"日本語"};
+  $("eula-en").textContent=eulaData.texts.en;
+  $("eula-r").textContent=eulaData.texts[lang]||eulaData.texts.en;
+  $("eula-rname").textContent=names[lang]||lang;
+  $("eula-l2t").textContent=eulaData.accept[lang]||eulaData.accept.en;
+  $("eula-c1").checked=false;$("eula-c2").checked=false;eulaChk();
+  $("eulabg").classList.add("on");
+}
+function eulaChk(){$("eula-ok").disabled=!($("eula-c1").checked&&$("eula-c2").checked);}
+async function eulaAccept(){
+  S.cfg.EulaVer=eulaData.version;
+  try{await apiPost("/api/config",{EulaVer:eulaData.version});}catch(e){}
+  $("eulabg").classList.remove("on");
+}
 const LANGS=[["ru","Русский"],["en","English"],["de","Deutsch"],["fr","Français"],["pt","Português"],["es","Español"],["zh","中文"],["ja","日本語"]];
 function showLangModal(){
   const cur=(S&&S.cfg&&S.cfg.Lang)||"";
@@ -420,6 +454,7 @@ function showLangModal(){
     `<div class="grid">`+LANGS.map(l=>`<button class="${l[0]===cur?"primary":""}" onclick="setLang('${l[0]}')">${l[1]}</button>`).join("")+`</div>`);
 }
 async function setLang(code){
+  try{localStorage.setItem("bpxLang",code);}catch(e){}
   if(S&&S.cfg){ S.cfg.Lang=code; try{await apiPost("/api/config",{Lang:code});}catch(e){} }
   location.reload();// полный F5: надёжнее live-переобхода — весь UI перерисовывается уже с пакетом
 }
@@ -430,6 +465,7 @@ async function loadState(){
     if(!S.cfg.Lang) showLangModal();
     else await loadLang(S.cfg.Lang);// ЖДЁМ пакет до первого renderHeader/renderActive — иначе tr() вернёт ru (гонка)
   }
+  if(!eulaChecked&&S.cfg){eulaChecked=true;checkEula();}
   S.measLoadedAll=(S.measTotal==null)||(S.measTotal<=(S.measurements||[]).length);
   if(!tzSent&&S.cfg){tzSent=true;try{const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.cfg.Tz!==tz)apiPost("/api/config",{Tz:tz});}catch(e){}}
   renderHeader();
@@ -723,10 +759,10 @@ async function doExport(kind){
 /* ---------- журнал: эмоции / шум / сон ---------- */
 function renderLog(){
   fillList("emo-t",S.emotions.map(e=>
-    `<tr><td>${fdt(e.T)} ${fhm(e.T)}</td><td>${(e.Val>0?"+":"")+e.Val} — ${esc(emoLabel(e.Val))}</td><td>${esc(e.Note||"")}</td>`+
+    `<tr><td>${fdt(e.T)} ${fhm(e.T)}</td><td>${(e.Val>0?"+":"")+e.Val} — ${esc(tr(emoLabel(e.Val)))}</td><td>${esc(e.Note||"")}</td>`+
     `<td><button onclick="delJ('${e.Id}')">✕</button></td></tr>`));
   fillList("noise-t",S.noises.map(e=>
-    `<tr><td>${fdt(e.T)} ${fhm(e.T)}</td><td>${esc(e.Type||"")}</td><td>${esc(e.Note||"")}</td>`+
+    `<tr><td>${fdt(e.T)} ${fhm(e.T)}</td><td>${esc(tr(e.Type||""))}</td><td>${esc(e.Note||"")}</td>`+
     `<td><button onclick="delJ('${e.Id}')">✕</button></td></tr>`));
   fillList("sleep-t",S.sleeps.map(e=>
     `<tr><td>${fdt(e.T)}</td><td>${e.Hours}</td><td>${e.Quality}</td><td>${esc(e.Note||"")}</td>`+
@@ -743,7 +779,7 @@ function openEmo(){
   $("mbody").onkeydown=enterSave(addEmo);
 }
 function openNoise(){
-  const types=(S.cfg.Noises||[]).map(t=>`<option>${esc(t)}</option>`).join("")+'<option value="__other">Другое…</option>';
+  const types=(S.cfg.Noises||[]).map(t=>`<option>${esc(tr(t))}</option>`).join("")+'<option value="__other">Другое…</option>';
   openModal("Шум / событие",`<div class="grid">
     <label>Время <input type="datetime-local" id="n-t" value="${nowDT()}"></label>
     <label>Тип <select id="n-type" onchange="$('n-custom').style.display=this.value==='__other'?'':'none'">${types}</select></label>
@@ -1059,8 +1095,8 @@ function delMd(i){S.cfg.Meds.splice(i,1);apiPost("/api/config",S.cfg).then(loadS
 function fillCfg(){
   const c=S.cfg;
   $("sum-gen").textContent=`${tr("широта")} ${c.Lat}, ${tr("долгота")} ${c.Lon}, ${tr("погоду каждые")} ${c.PollMin} ${tr("мин")} · ${tr("звук")} ${c.AlarmFile||"alarm.mp3"}, ${tr("напоминать за")} ${c.AlarmAheadMin} ${tr("мин до")}`;
-  $("sum-user").textContent=(c.Dob?("дата рождения "+c.Dob):"дата рождения не указана")+" · "+(c.Sex==="m"?"мужской":c.Sex==="f"?"женский":"пол не указан");
-  $("sum-norm").textContent=`норма ≤ ${c.NormSys}/${c.NormDia} · пауза popup ${c.PopupCooldownMin} мин`;
+  $("sum-user").textContent=(c.Dob?(tr("дата рождения")+" "+c.Dob):tr("дата рождения не указана"))+" · "+tr(c.Sex==="m"?"мужской":c.Sex==="f"?"женский":"пол не указан");
+  $("sum-norm").textContent=`${tr("норма ≤")} ${c.NormSys}/${c.NormDia} · ${tr("пауза popup")} ${c.PopupCooldownMin} ${tr("мин")}`;
   $("sum-ha").textContent=c.Ha&&c.Ha.Url?("URL "+c.Ha.Url):"не подключён";
   $("sum-nn").textContent=`lr ${c.Nn.Lr} · слои ${c.Nn.Hidden}/${c.Nn.Hidden2} · эпох ${c.Nn.Epochs}`;
   $("c-auto").checked=!!S.autostart;

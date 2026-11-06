@@ -47,6 +47,7 @@ td:first-child{color:var(--mut);width:52px}
   <div id="flash"></div>
 </div>
 <div class="today"><h3>Сегодня</h3><table id="q-list"></table><div class="mut" id="q-empty"></div></div>
+<script src="/i18n.js"></script>
 <script>
 function $(x){return document.getElementById(x)}
 function pad(n){return String(n).padStart(2,"0")}
@@ -56,7 +57,7 @@ function apiPost(p,b){return fetch(p,{method:"POST",credentials:"same-origin",he
 function flash(t,ok){const f=$("flash");f.textContent=t;f.style.display="block";f.style.background=ok?"#2e7d32":"#c62828";clearTimeout(f._t);f._t=setTimeout(()=>f.style.display="none",2500)}
 let today=[];
 function renderToday(){
-  const rows=today.slice(-6).reverse().map(m=>"<tr><td>"+(m.t||"").slice(11,16)+"</td><td><b>"+m.sys+"/"+m.dia+"</b></td><td>пульс "+(m.pulse||"—")+"</td></tr>").join("");
+  const rows=today.slice(-6).reverse().map(m=>"<tr><td>"+(m.t||"").slice(11,16)+"</td><td><b>"+m.sys+"/"+m.dia+"</b></td><td>"+tr("пульс")+" "+(m.pulse||"—")+"</td></tr>").join("");
   $("q-list").innerHTML=rows;
   $("q-empty").textContent=today.length?"":"пока пусто — введите значения и нажмите Enter";
 }
@@ -72,11 +73,13 @@ function saveQ(){
     }else flash(j.err==="csrf"?"Сессия не найдена — войдите в дневник":(j.err||"Ошибка"),false);
   });
 }
-["q-sys","q-dia","q-pulse","q-note"].forEach(id=>$(id).addEventListener("keydown",e=>{if(e.key==="Enter")saveQ();}));
+const qOrder=["q-sys","q-dia","q-pulse","q-t","q-note"];
+qOrder.forEach((id,i)=>$(id).addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();if(i<qOrder.length-1)$(qOrder[i+1]).focus();else saveQ();}}));
 fetch("/api/state",{credentials:"same-origin"}).then(r=>{
   if(!r.ok){location.href="/login";return Promise.reject();}
   return r.json();
 }).then(S=>{
+  if(S.cfg&&S.cfg.Lang)loadLang(S.cfg.Lang);
   const day=new Date().getFullYear()+"-"+pad(new Date().getMonth()+1)+"-"+pad(new Date().getDate());
   today=(S.measurements||[]).filter(m=>(m.T||"").startsWith(day)).map(m=>({t:m.t||m.T,sys:m.Sys,dia:m.Dia,pulse:m.Pulse}));
   renderToday();
