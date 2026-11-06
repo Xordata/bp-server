@@ -83,8 +83,11 @@ fail2ban-client status bp-login    # должен показать Filter/Log fi
 ## 5. Бэкап (файл backup-bpdata.sh)
 ```bash
 install -m 755 backup-bpdata.sh /usr/local/bin/
-( crontab -l; echo '30 3 * * * /usr/local/bin/backup-bpdata.sh' ) | crontab -
+( crontab -l 2>/dev/null; echo '30 3 * * * /usr/local/bin/backup-bpdata.sh' ) | crontab -
+# проверка: /usr/local/bin/backup-bpdata.sh && tar -tzf /opt/bpdata/backup/bpdata-*.tar.gz | grep -c backup/  # 0
 ```
+Архив всех пользователей → `/opt/bpdata/backup/bpdata-<ts>.tar.gz`, ротация 14, каталог backup
+исключён из tar (рекурсия), `.part` + проверка целостности перед переименованием. Подробности — DEPLOY.md §11.
 
 ## 6. Бот-аккаунт для писем-будильников — СДЕЛАНО 2026-11-05
 ```bash

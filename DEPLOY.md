@@ -166,10 +166,25 @@ fail2ban-client reload && fail2ban-client status bp-login
 
 ```bash
 install -m 755 backup-bpdata.sh /usr/local/bin/
-( crontab -l; echo '30 3 * * * /usr/local/bin/backup-bpdata.sh' ) | crontab -
+( crontab -l 2>/dev/null; echo '30 3 * * * /usr/local/bin/backup-bpdata.sh' ) | crontab -
+# проверка: прогон вручную + отсутствие рекурсии + ровно одна строка в cron
+/usr/local/bin/backup-bpdata.sh && ls -lh /opt/bpdata/backup/
+tar -tzf /opt/bpdata/backup/bpdata-*.tar.gz | grep -c backup/   # должно быть 0
+crontab -l | grep -c backup-bpdata                               # должно быть 1
 ```
-Скрипт пакует весь `/opt/bpdata` одним архивом в `/var/backups` (ротация 14 дней).
-Для внешней синхронизации (rsync/borg) планируем общий каталог `/opt/bpdata/backup` — см. TODO.md.
+
+Скрипт раз в сутки (03:30, после `backup_maddy.sh` в 03:00) пакует **всё содержимое `/opt/bpdata`
+(все пользователи)** одним архивом `/opt/bpdata/backup/bpdata-<ts>.tar.gz`, ротация — последние 14.
+Особенности реализации:
+- каталог `/opt/bpdata/backup` исключён из tar (`--exclude=bpdata/backup`) — иначе архив читал бы сам себя;
+- запись через `.part` с проверкой целостности (`tar -tzf`) перед переименованием — rsync/borg никогда
+  не заберут оборванный архив;
+- «file changed as we read it» (append-only `data.bin` дописывается во время упаковки) не считается
+  ошибкой — fatal только rc>=2 у tar;
+- владелец файлов — `bpxor:bpxor`.
+
+Внешняя синхронизация: rsync/borg забирают `/opt/bpdata/backup/` на внешнее хранилище.
+Пер-profile суточные zip внутри `users/<uid>/backups/` остаются как локальная страховка.
 
 ## 12. Проверка установки (снаружи сервера)
 
