@@ -279,7 +279,7 @@
  "лёгкая радость": "leichte Freude",
  "лёгкая усталость": "leichte Müdigkeit",
  "лёгкое удовлетворение": "leichte Zufriedenheit",
- "мин будильник:": "Min. Erinnerung:",
+ "мин будильник:": "Min — Erinnerung:",
  "мм": "mmHg",
  "модель: —": "Modell: —",
  "мужской": "männlich",
@@ -410,5 +410,9 @@
  "Сохранено ✓": "Gespeichert ✓",
  "Сессия не найдена — войдите в дневник": "Sitzung nicht gefunden — bitte im Tagebuch anmelden",
  "сеть": "Netzwerkfehler",
- "Автозапуск (реестр HKCU\\...\\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».": "Autostart (Registrierung HKCU\\...\\Run) wird sofort angewendet, „Speichern“ ist nicht nötig. In der Webversion wird die Einstellung über die Konfigurationssynchronisation an den Desktop-Client übergeben, wenn dort die Synchronisation im Modus „Server ist Master“ aktiv ist."
+ "Автозапуск (реестр HKCU\\...\\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».": "Autostart (Registrierung HKCU\\...\\Run) wird sofort angewendet, „Speichern“ ist nicht nötig. In der Webversion wird die Einstellung über die Konfigurationssynchronisation an den Desktop-Client übergeben, wenn dort die Synchronisation im Modus „Server ist Master“ aktiv ist.",
+ "Пора измерить давление.": "Zeit, den Blutdruck zu messen.",
+ "Пора принять: ": "Einnahme fällig: ",
+ "Отметьте приём во вкладке «Лекарства».": "Markieren Sie die Einnahme im Tab Medikamente.",
+ "порт": "Port"
 }

@@ -279,7 +279,7 @@
  "лёгкая радость": "slight joy",
  "лёгкая усталость": "slight tiredness",
  "лёгкое удовлетворение": "mild satisfaction",
- "мин будильник:": "min alarm:",
+ "мин будильник:": "min — alarm:",
  "мм": "mmHg",
  "модель: —": "model: —",
  "мужской": "male",
@@ -410,5 +410,9 @@
  "Сохранено ✓": "Saved ✓",
  "Сессия не найдена — войдите в дневник": "Session not found — log in to the diary",
  "сеть": "network error",
- "Автозапуск (реестр HKCU\\...\\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».": "Autostart (registry HKCU\\...\\Run) applies immediately, no need to press 'Save'. In the web version the setting is passed to the desktop client via config sync if the desktop has sync enabled in 'server is master' mode."
+ "Автозапуск (реестр HKCU\\...\\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».": "Autostart (registry HKCU\\...\\Run) applies immediately, no need to press 'Save'. In the web version the setting is passed to the desktop client via config sync if the desktop has sync enabled in 'server is master' mode.",
+ "Пора измерить давление.": "Time to measure your blood pressure.",
+ "Пора принять: ": "Time to take: ",
+ "Отметьте приём во вкладке «Лекарства».": "Mark the intake in the 'Medications' tab.",
+ "порт": "port"
 }

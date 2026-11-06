@@ -159,13 +159,12 @@ static class AlarmScheduler{
 			try{ EventHub.Publish(uid,JObject.FromObject(new{t="alarm",key=due.AlarmKeys[i],label=due.AlarmLabels[i]}).ToString(Formatting.None)); }catch{}
 		}
 		for(int i=0;i<due.AlarmLabels.Count;i++)
-			NotifyUser(uid,cfg,"Будильник: "+due.AlarmLabels[i],"Пора измерить давление. "+due.AlarmLabels[i],!online);
+			NotifyUser(uid,cfg,LangPacks.Tr(cfg.Lang,"Будильник:")+" "+due.AlarmLabels[i],LangPacks.Tr(cfg.Lang,"Пора измерить давление.")+" "+due.AlarmLabels[i],!online);
 		foreach(string med in due.MedLabels)
-			NotifyUser(uid,cfg,"Лекарства","Пора принять: "+med);
+			NotifyUser(uid,cfg,LangPacks.Tr(cfg.Lang,"Лекарства"),LangPacks.Tr(cfg.Lang,"Пора принять: ")+med);
 	}
 
 	static void NotifyUser(string uid,Config cfg,string title,string body,bool push=true){
-		title=LangPacks.Tr(cfg.Lang,title); body=LangPacks.Tr(cfg.Lang,body);// push/email на языке профиля (ru = без изменений)
 		bool pushed=false;
 		if(push){// false = звоним открытой вкладке по SSE — push и email не плодим
 			try{ var t=PushStore.SendToUser(uid,title,body); if(t.Wait(TimeSpan.FromSeconds(25))) pushed=t.Result; }// Wait(таймаут) = «успел ли», НЕ результат; Result берём только после Wait (зависший push-эндпоинт не блокирует цикл)

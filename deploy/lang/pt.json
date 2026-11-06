@@ -279,7 +279,7 @@
  "лёгкая радость": "leve alegria",
  "лёгкая усталость": "leve cansaço",
  "лёгкое удовлетворение": "leve satisfação",
- "мин будильник:": "min lembrete:",
+ "мин будильник:": "min — lembrete:",
  "мм": "mmHg",
  "модель: —": "modelo: —",
  "мужской": "masculino",
@@ -410,5 +410,9 @@
  "Сохранено ✓": "Salvo ✓",
  "Сессия не найдена — войдите в дневник": "sessão não encontrada — entre no diário",
  "сеть": "erro de rede",
- "Автозапуск (реестр HKCU\\...\\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».": "Iniciar com o Windows (registro HKCU\\...\\Run) aplica-se imediatamente, sem precisar «Salvar». Na versão web, o ajuste é transmitido ao cliente desktop pela sincronização de configuração, se o desktop tiver sincronização ativada no modo «servidor é o mestre»."
+ "Автозапуск (реестр HKCU\\...\\Run) применяется сразу, «Сохранить» не нужен. В веб-версии настройка передаётся десктопному клиенту при синхронизации конфигурации, если на десктопе включена синхронизация с режимом «сервер главный».": "Iniciar com o Windows (registro HKCU\\...\\Run) aplica-se imediatamente, sem precisar «Salvar». Na versão web, o ajuste é transmitido ao cliente desktop pela sincronização de configuração, se o desktop tiver sincronização ativada no modo «servidor é o mestre».",
+ "Пора измерить давление.": "Hora de medir a pressão arterial.",
+ "Пора принять: ": "Hora de tomar: ",
+ "Отметьте приём во вкладке «Лекарства».": "Marque a tomada na aba Medicamentos.",
+ "порт": "porta"
 }
