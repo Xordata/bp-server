@@ -416,7 +416,6 @@
  "Отметьте приём во вкладке «Лекарства».": "Marque a tomada na aba Medicamentos.",
  "порт": "porta",
  "Дневник АД — вход": "Diário de PA — entrada",
- "bp.xor.world — вход почтовым паролем @xor.world": "bp.xor.world — entre com a senha do seu e-mail @xor.world",
  "Почта": "E-mail",
  "Пароль": "Senha",
  "Войти": "Entrar",
@@ -424,5 +423,6 @@
  "слишком много попыток, подождите": "muitas tentativas, aguarde",
  "достигнут лимит пользователей сервера": "limite de usuários do servidor atingido",
  "сеть недоступна": "rede indisponível",
- "ошибка": "erro"
+ "ошибка": "erro",
+ "вход по почтовому паролю": "entre com a senha do seu e-mail"
 }

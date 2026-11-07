@@ -416,7 +416,6 @@
  "Отметьте приём во вкладке «Лекарства».": "Marquez la prise dans l'onglet Médicaments.",
  "порт": "port",
  "Дневник АД — вход": "Journal de tension — connexion",
- "bp.xor.world — вход почтовым паролем @xor.world": "bp.xor.world — connexion avec le mot de passe de votre e-mail @xor.world",
  "Почта": "E-mail",
  "Пароль": "Mot de passe",
  "Войти": "Se connecter",
@@ -424,5 +423,6 @@
  "слишком много попыток, подождите": "trop de tentatives, veuillez patienter",
  "достигнут лимит пользователей сервера": "limite d'utilisateurs du serveur atteinte",
  "сеть недоступна": "réseau indisponible",
- "ошибка": "erreur"
+ "ошибка": "erreur",
+ "вход по почтовому паролю": "connexion avec le mot de passe de votre e-mail"
 }

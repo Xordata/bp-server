@@ -416,7 +416,6 @@
  "Отметьте приём во вкладке «Лекарства».": "Markieren Sie die Einnahme im Tab Medikamente.",
  "порт": "Port",
  "Дневник АД — вход": "Blutdruck-Tagebuch — Anmeldung",
- "bp.xor.world — вход почтовым паролем @xor.world": "bp.xor.world — Anmeldung mit Ihrem @xor.world E-Mail-Passwort",
  "Почта": "E-Mail",
  "Пароль": "Passwort",
  "Войти": "Anmelden",
@@ -424,5 +423,6 @@
  "слишком много попыток, подождите": "zu viele Versuche, bitte warten",
  "достигнут лимит пользователей сервера": "Nutzerlimit des Servers erreicht",
  "сеть недоступна": "Netzwerk nicht verfügbar",
- "ошибка": "Fehler"
+ "ошибка": "Fehler",
+ "вход по почтовому паролю": "Anmeldung mit Ihrem E-Mail-Passwort"
 }

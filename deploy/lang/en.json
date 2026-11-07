@@ -416,7 +416,6 @@
  "Отметьте приём во вкладке «Лекарства».": "Mark the intake in the 'Medications' tab.",
  "порт": "port",
  "Дневник АД — вход": "BP Diary — sign in",
- "bp.xor.world — вход почтовым паролем @xor.world": "bp.xor.world — sign in with your @xor.world email password",
  "Почта": "Email",
  "Пароль": "Password",
  "Войти": "Sign in",
@@ -424,5 +423,6 @@
  "слишком много попыток, подождите": "too many attempts, please wait",
  "достигнут лимит пользователей сервера": "server user limit reached",
  "сеть недоступна": "network unavailable",
- "ошибка": "error"
+ "ошибка": "error",
+ "вход по почтовому паролю": "sign in with your email password"
 }
