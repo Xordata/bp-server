@@ -1,18 +1,17 @@
 # /etc/nginx/sites-available/bp.xor.world
-# Фаза 0: сначала порт 80, затем `certbot --nginx -d bp.xor.world --redirect`
-# сам добавит 443/TLS и редирект.
-# ВНИМАНИЕ (2026-11-07): этот файл содержит ТОЛЬКО :80-блок. certbot дописывает 443-блок
-# в файл на сервере — НЕ переносить этот файл поверх серверного целиком, иначе 443 vhost
-# теряется и https://bp.xor.world отдаёт дефолтный сертификат (SEC_E_WRONG_PRINCIPAL).
-# Правки заголовков/локейшенов — диффом, либо после применения перенести 443-блок обратно в репо.
+# Синхронно с сервером по состоянию 2026-11-07 (после `certbot --nginx -d bp.xor.world --redirect`).
+# ВНИМАНИЕ: блоки "managed by Certbot" дописывает certbot в файл НА СЕРВЕРЕ.
+# 2026-11-07 файл репо перенесли поверх серверного целиком — 443 vhost потерялся, https лежал
+# (curl: SEC_E_WRONG_PRINCIPAL, отдавался дефолтный сертификат CN=xor.world). Починка:
+# `sudo certbot --nginx -d bp.xor.world --redirect` (reinstall существующего сертификата).
+# Файл самодостаточен (443 + редирект) — после любой certbot-команды на сервере возвращайте
+# актуальный файл сюда; пути сертификатов сверяйте с `certbot certificates`.
 
 limit_req_zone $binary_remote_addr zone=bpxor_login:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=bpxor_sync:10m rate=30r/m;
 limit_req_zone $binary_remote_addr zone=bpxor_api:10m rate=60r/m;
 
 server {
-    listen 80;
-    listen [::]:80;
     server_name bp.xor.world;
 
     client_max_body_size 20m;   # импорт export/all
@@ -70,4 +69,27 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Host $host;
     }
+
+    listen [::]:443 ssl; # managed by Certbot
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/bp.xor.world/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/bp.xor.world/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+
+
+server {
+    if ($host = bp.xor.world) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    listen [::]:80;
+    server_name bp.xor.world;
+    return 404; # managed by Certbot
+
+
 }
