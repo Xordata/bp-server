@@ -1,6 +1,10 @@
 # /etc/nginx/sites-available/bp.xor.world
 # Фаза 0: сначала порт 80, затем `certbot --nginx -d bp.xor.world --redirect`
 # сам добавит 443/TLS и редирект.
+# ВНИМАНИЕ (2026-11-07): этот файл содержит ТОЛЬКО :80-блок. certbot дописывает 443-блок
+# в файл на сервере — НЕ переносить этот файл поверх серверного целиком, иначе 443 vhost
+# теряется и https://bp.xor.world отдаёт дефолтный сертификат (SEC_E_WRONG_PRINCIPAL).
+# Правки заголовков/локейшенов — диффом, либо после применения перенести 443-блок обратно в репо.
 
 limit_req_zone $binary_remote_addr zone=bpxor_login:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=bpxor_sync:10m rate=30r/m;
