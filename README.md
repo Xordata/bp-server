@@ -22,6 +22,7 @@ nginx (443 http2, brotli, TLS certbot; 80→301)
        │    — та же модель данных и та же НН, что в десктопном BpMonitor (порт)
        ├─ ApiTokens (/api/sync/push|pull, Bearer): дельта-синхрон с десктопами (LWW по seq, тумстоуны, echo-подавление)
        ├─ Scheduler: будильники — тик 30 с по всем каталогам users/, tz юзера, догон 30 мин;
+       │  авто-стоп звонка через 15 мин без реакции (RingMaxMin → dismiss, вкладки замолкают по SSE/поллингу);
        │    дедуп звонка: SSE-событие «alarm» открытым вкладкам (звонит вкладка), push/email — только если вкладок нет
        ├─ EventHub (SSE /api/events): дельты состояния/будильников/dismiss на вкладки (heartbeat 25 с, nginx proxy_buffering off)
        ├─ Push (Web Push VAPID, TTL 3600, tag+renotify) + SmtpSender (STARTTLS к maddy, бот bpxor@example.org) — фолбэк будильников
