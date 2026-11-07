@@ -16,12 +16,14 @@ server {
 
     client_max_body_size 20m;   # импорт export/all
 
-    # заголовки безопасности (аудит 2026-11-07): CSP без script-src — SPA использует инлайновые <script>,
-    # поэтому frame-ancestors/object/base — основной эффект; nosniff обязателен
+    # заголовки безопасности (аудит 2026-11-07): SPA полностью инлайновый (single-file), поэтому
+    # script-src/style-src обязаны содержать 'unsafe-inline' — без них default-src 'self' блокирует
+    # ВЕСЬ инлайн CSS+JS (2026-11-07 прод «потерял стили» именно так). Основной эффект гейта:
+    # frame-ancestors/object/base/form-action; nosniff обязателен.
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "same-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
 
     access_log /var/log/nginx/bp.access.log combined;
 
