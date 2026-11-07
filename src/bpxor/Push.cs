@@ -99,7 +99,7 @@ static class PushStore{
 				any=true;
 			}catch(WebPush.WebPushException ex){
 				if(ex.StatusCode==System.Net.HttpStatusCode.NotFound||ex.StatusCode==System.Net.HttpStatusCode.Gone)Remove(uid,s.Endpoint);
-				Console.WriteLine("push fail "+uid+": "+ex.Message);
+				Console.WriteLine("push fail "+uid+": "+ex.Message); Watchdog.PushFailInc(ex.Message);
 			}
 		}
 		return any;

@@ -81,13 +81,14 @@ partial class Profile{
 	static string H(object v){ return v==null?"":Convert.ToString(v,System.Globalization.CultureInfo.InvariantCulture); }
 	// каноническая сигнатура записи для «то же содержимое» (echo). EmotionLabel исключён — он производный от EmotionV
 	static string MeasHash(Measurement m){
-		return string.Join("|",m.T.Ticks,m.Sys,m.Dia,m.Pulse,H(m.PressMm),H(m.TempC),H(m.Hum),H(m.Kp),H(m.EmotionV),H(m.SleepH),H(m.SleepQ),m.Wx??"",m.Note??"",
+		return string.Join("|",m.T.Ticks,m.Sys,m.Dia,m.Pulse,H(m.PressMm),H(m.TempC),H(m.Hum),H(m.Kp),H(m.EmotionV),H(m.SleepH),H(m.SleepQ),H(m.PosArm),m.Wx??"",m.Note??"",
 			string.Join(",",(m.Meds??new List<string>()).OrderBy(x=>x)),string.Join(",",(m.Noise??new List<string>()).OrderBy(x=>x)));
 	}
 	static string EmoHash(EmotionEntry e){ return string.Join("|",e.T.Ticks,e.Val,e.Note??""); }
 	static string NoiHash(NoiseEntry n){ return string.Join("|",n.T.Ticks,n.Type??"",n.Note??""); }
 	static string SleepHash(SleepEntry s){ return string.Join("|",H(s.Hours),s.Quality,s.Note??"",s.T.Ticks); }
 	static string MtHash(MedTakeEntry mt){ return string.Join("|",mt.T.Ticks,mt.Med??""); }
+	static string SaltHash(SaltEntry st){ return string.Join("|",st.T.Ticks,st.Val,st.Note??""); }
 	bool SyncDel<T>(string id,List<T> list,Func<T,string> getid,byte delType){
 		id=NormId(id);
 		if(id=="") return false;
@@ -97,7 +98,7 @@ partial class Profile{
 		AppendGuidRec(delType,id);
 		return true;
 	}
-	// POST /api/sync/push {recs:[{k:"meas"|"measDel"|"emo"|"emoDel"|"noi"|"noiDel"|"sleep"|"sleepDel"|"mt"|"mtDel",...}], cfg?:{...}}
+	// POST /api/sync/push {recs:[{k:"meas"|"measDel"|"emo"|"emoDel"|"noi"|"noiDel"|"sleep"|"sleepDel"|"mt"|"mtDel"|"salt"|"saltDel",...}], cfg?:{...}}
 	// Вызывается под lock(Sync) (обёртка Post). Записи применяются КАК ЕСТЬ: снимки погоды/контекста
 	// уже вычислены на стороне-источнике, переснимать нельзя — история перезапишется сегодняшней погодой.
 	// Train/SaveNn — один раз на пачку (первый импорт сотен записей не должен учить модель сотни раз).
@@ -139,6 +140,14 @@ partial class Profile{
 				D.S.RemoveAll(x=>x.Id==s.Id); D.S.Add(s); AppendSleep(s); applied++; touched=true;
 			}
 			else if(k=="sleepDel"){ if(SyncDel((string)jt["Id"],D.S,x=>x.Id,RecSleepDel)){ applied++; touched=true; } else skipped++; }
+			else if(k=="salt"){
+				SaltEntry st=jt.ToObject<SaltEntry>(); st.Id=NormId(st.Id);
+				if(st.Id==""||st.T==default(DateTime)||st.Val<1||st.Val>5){ skipped++; continue; }
+				SaltEntry ex5=D.Salt.FirstOrDefault(x=>x.Id==st.Id);
+				if(ex5!=null&&SaltHash(ex5)==SaltHash(st)){ skipped++; continue; }
+				D.Salt.RemoveAll(x=>x.Id==st.Id); D.Salt.Add(st); AppendSalt(st); applied++;
+			}
+			else if(k=="saltDel"){ if(SyncDel((string)jt["Id"],D.Salt,x=>x.Id,RecSaltDel)){ applied++; } else skipped++; }
 			else if(k=="mt"){
 				MedTakeEntry mt=jt.ToObject<MedTakeEntry>(); mt.Id=NormId(mt.Id);
 				if(mt.Id==""||mt.T==default(DateTime)){ skipped++; continue; }

@@ -190,6 +190,21 @@ partial class Profile
 			if(D.N.Count!=1||D.S.Count!=1) throw new Exception("журнал: N="+D.N.Count+" S="+D.S.Count);
 			if(D.LastPopup==null||D.LastPopup.Value!=new DateTime(2026,8,21,9,0,0)) throw new Exception("LastPopup");
 		});
+		check("соль + поза/рука: round-trip и tombstone",()=>{
+			string sid=Guid.NewGuid().ToString("N");
+			AppendSalt(new SaltEntry{Id=sid,T=new DateTime(2026,9,1,9,0,0),Val=4,Note="сёлёдка"});
+			string mid=Guid.NewGuid().ToString("N");
+			AppendMeasurement(new Measurement{Id=mid,T=new DateTime(2026,9,1,10,0,0),Sys=120,Dia=80,Pulse=65,PosArm=2*4+1});
+			D=new DataStore(); LoadBin();
+			SaltEntry st=D.Salt.FirstOrDefault(x=>x.Id==sid);
+			if(st==null||st.Val!=4||st.Note!="сёлёдка") throw new Exception("соль потеряна");
+			Measurement mp=D.M.FirstOrDefault(x=>x.PosArm!=null);
+			if(mp==null||mp.PosArm.Value!=9) throw new Exception("PosArm потерян");
+			AppendGuidRec(RecSaltDel,sid); AppendGuidRec(RecMeasDel,mid);// за собой убираем — следующие проверки считают измерения в этом же sandbox
+			D=new DataStore(); LoadBin();
+			if(D.Salt.Any(x=>x.Id==sid)) throw new Exception("tombstone соли не сработал");
+			if(D.M.Any(x=>x.Id==mid)) throw new Exception("tombstone измерения не сработал");
+		});
 		check("data.bin: оборванный хвост после краша",()=>{
 			using(FileStream fs=File.Open(DataBinPath,FileMode.Append)) fs.Write(new byte[]{0x10,0x40,0x00,0x00,0x00,1,2,3},0,8);// запись обещает 0x40 байт, файл обрывается
 			D=new DataStore(); LoadBin();// не должен бросить: что прочитано, то прочитано

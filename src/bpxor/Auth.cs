@@ -30,6 +30,9 @@ public class AuthCfg{
 	public int SmtpPort=587;
 	public string SmtpUser="";// адрес ящика-бота (только в bpxor.config.json рядом с exe); пусто = email-фолбэк выключен
 	public string SmtpPass="";
+	public string WxContact="admin@example.org";// контакт в UA внешних API (met.no/photon) по их политике; реальный — только в bpxor.config.json
+	public string WatchdogMail="";// куда слать сводку сбоев push/email (пусто = молчим)
+	public int WatchdogCheckMin=60;// период сводки, мин
 	public string SmtpFrom="";// пусто = From берётся из SmtpUser (адрес бота не хранится в коде)
 	public string WxSource="openmeteo";// "metno" — api.met.no (open-meteo лежит на Hetzner, который режет входящие с некоторых хостинговых ASN)
 }

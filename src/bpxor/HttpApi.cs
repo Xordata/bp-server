@@ -16,6 +16,7 @@ using Newtonsoft.Json.Linq;
 
 namespace BpMonitor{
 static class HttpApi{
+	static readonly System.Net.Http.HttpClient GeoHttp=new System.Net.Http.HttpClient{Timeout=TimeSpan.FromSeconds(8)};
 	static async Task<string> ReadBody(HttpRequest r){
 		using(StreamReader sr=new StreamReader(r.Body,Encoding.UTF8)) return await sr.ReadToEndAsync();
 	}
@@ -59,6 +60,33 @@ static class HttpApi{
 			long Ql(string k){ long v; return long.TryParse((string)ctx.Request.Query[k],out v)?v:-1; }
 			return Json(pr.DeltaJson(Ql("since"),Ql("gen"),Ql("cfgRev"),Ql("nnRev"),Ql("wxRev"),Ql("pkRev")));
 		})());
+		// Геокодинг «город вместо координат» (план §5): прокси photon.komoot.io (OSM), отдаём {ok,results:[{n,a,lat,lon}]}
+		app.MapMethods("/api/geo",new[]{HttpMethods.Get,HttpMethods.Head},async ctx=>{
+			string q=((string)ctx.Request.Query["q"]??"").Trim();
+			ctx.Response.ContentType="application/json; charset=utf-8";
+			if(q.Length<2||q.Length>80){ ctx.Response.StatusCode=400; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\"q\"}"); return; }
+			try{
+				using(var rq=new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get,"https://photon.komoot.io/api/?q="+Uri.EscapeDataString(q)+"&limit=6")){
+					rq.Headers.UserAgent.ParseAdd("bpxor/1.0 (contact: "+(Program.ACfg.WxContact??"admin@example.org")+")");
+					using(var rp=await GeoHttp.SendAsync(rq)){
+						rp.EnsureSuccessStatusCode();
+						JObject j=JObject.Parse(await rp.Content.ReadAsStringAsync());
+						JArray res=new JArray();
+						foreach(JToken ft in (j["features"] as JArray)??new JArray()){
+							JArray co=ft["geometry"]!=null?ft["geometry"]["coordinates"] as JArray:null;
+							if(co==null||co.Count<2) continue;
+							JToken pr=ft["properties"]??new JObject();
+							string nm=(string)pr["name"]??(string)pr["street"]??"";
+							if(nm=="") continue;
+							string a=string.Join(", ",new[]{(string)pr["city"],(string)pr["state"],(string)pr["country"]}.Where(x=>!string.IsNullOrEmpty(x)).Distinct());
+							res.Add(new JObject{["n"]=nm,["a"]=a,["lat"]=Math.Round((double)co[1],4),["lon"]=Math.Round((double)co[0],4)});
+						}
+						await ctx.Response.WriteAsync(new JObject{["ok"]=true,["results"]=res}.ToString(Newtonsoft.Json.Formatting.None));
+						return;
+					}
+				}
+			}catch{ ctx.Response.StatusCode=502; await ctx.Response.WriteAsync("{\"ok\":false,\"err\":\""+"геокодер недоступен\"}"); }
+		});
 		// Фаза 5: окно истории (старше before, новые-first)
 		app.MapMethods("/api/measurements",new[]{HttpMethods.Get,HttpMethods.Head},(HttpContext ctx)=>Guard(()=>{
 			Profile pr=P(ctx);
@@ -124,6 +152,7 @@ static class HttpApi{
 				Note=jo["note"]!=null?jo["note"].ToString():""
 			};
 			if(jo["meds"] is JArray) m.Meds=jo["meds"].Values<string>().Where(x=>x!="").ToList();
+			if(jo["posArm"]!=null&&jo["posArm"].Type!=Newtonsoft.Json.Linq.JTokenType.Null){ int pa=(int)jo["posArm"]; m.PosArm=(pa>=0&&pa<=11)?(int?)pa:null; }
 			p.Snapshot(m);
 			if(m.T<=DateTime.Now.AddHours(-2)) p.FillWx(m);
 			p.D.M.Add(m);
@@ -143,6 +172,7 @@ static class HttpApi{
 				m.Note=jo["note"]!=null?jo["note"].ToString():"";
 				if(m.T<=DateTime.Now.AddHours(-2)) p.FillWx(m);
 				if(jo["meds"] is JArray) m.Meds=jo["meds"].Values<string>().Where(x=>x!="").ToList();
+			if(jo["posArm"]!=null&&jo["posArm"].Type!=Newtonsoft.Json.Linq.JTokenType.Null){ int pa=(int)jo["posArm"]; m.PosArm=(pa>=0&&pa<=11)?(int?)pa:null; }
 				p.Train();
 				p.AppendMeasurement(m);
 				p.SaveNn();
@@ -166,6 +196,14 @@ static class HttpApi{
 			foreach(Measurement mm in p.D.M.Where(x=>ee.T>=x.T&&ee.T-x.T<=TimeSpan.FromMinutes(10)).ToList()){ p.SnapshotContext(mm); p.AppendMeasurement(mm); }
 			return Json(new{ok=true});
 		}));
+		app.MapPost("/api/salt",ctx=>Post(ctx,(p,jo,body)=>{
+			int v=(int)jo["val"];
+			if(v<1||v>5) return Json(new{ok=false,err="val 1..5"});
+			SaltEntry st=new SaltEntry{Id=Guid.NewGuid().ToString("N"),T=p.JT(jo,"t"),Val=v,Note=jo["note"]!=null?jo["note"].ToString():""};
+			p.D.Salt.Add(st);
+			p.AppendSalt(st);
+			return Json(new{ok=true});
+		}));
 		app.MapPost("/api/noise",ctx=>Post(ctx,(p,jo,body)=>{
 			NoiseEntry ne=new NoiseEntry{Id=Guid.NewGuid().ToString("N"),T=p.JT(jo,"t"),Type=jo["type"].ToString(),Note=jo["note"]!=null?jo["note"].ToString():""};
 			p.D.N.Add(ne);
@@ -186,6 +224,7 @@ static class HttpApi{
 			if(p.D.E.Any(x=>x.Id==id)){ p.D.E.Remove(p.D.E.First(x=>x.Id==id)); p.AppendGuidRec(Profile.RecEmoDel,id); }
 			else if(p.D.N.Any(x=>x.Id==id)){ p.D.N.Remove(p.D.N.First(x=>x.Id==id)); p.AppendGuidRec(Profile.RecNoiDel,id); }
 			else if(p.D.S.Any(x=>x.Id==id)){ p.D.S.Remove(p.D.S.First(x=>x.Id==id)); p.AppendGuidRec(Profile.RecSleepDel,id); }
+			else if(p.D.Salt.Any(x=>x.Id==id)){ p.D.Salt.Remove(p.D.Salt.First(x=>x.Id==id)); p.AppendGuidRec(Profile.RecSaltDel,id); }
 			return Json(new{ok=true});
 		}));
 		app.MapPost("/api/sleep/import",ctx=>Post(ctx,(p,jo,body)=>{

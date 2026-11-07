@@ -49,7 +49,7 @@ partial class Profile
 				string mu=string.Format(CultureInfo.InvariantCulture,"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={0:0.0000}&lon={1:0.0000}",Cfg.Lat,Cfg.Lon);
 				if(!WxCache.Try("liveMetno:"+wk,WxCache.LiveTtlMin,out j)){
 					using(var rq=new HttpRequestMessage(HttpMethod.Get,mu)){
-						rq.Headers.UserAgent.ParseAdd("bpxor/1.0 (https://bp.xor.world; contact: admin@example.org)");
+						rq.Headers.UserAgent.ParseAdd("bpxor/1.0 (https://bp.xor.world; contact: "+Program.ACfg.WxContact+")");
 						using(var rp=await Http.SendAsync(rq)){ rp.EnsureSuccessStatusCode(); j=JObject.Parse(await rp.Content.ReadAsStringAsync()); }
 					}
 					WxCache.Put("liveMetno:"+wk,j);

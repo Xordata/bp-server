@@ -87,6 +87,7 @@ public class Measurement{
 	public List<string> Noise=new List<string>();
 	public float? SleepH;
 	public int? SleepQ;
+	public int? PosArm;// поза+рука: pos*4+arm; pos 0=сидя,1=стоя,2=лёжа; arm 0=левая,1=правая,2=не указано
 }
 public class EmotionEntry{
 	public string Id;
@@ -107,6 +108,12 @@ public class SleepEntry{
 	public int Quality;
 	public string Note="";
 }
+public class SaltEntry{
+	public string Id;
+	public DateTime T;
+	public int Val;// 1..5 — «соление» дня
+	public string Note="";
+}
 public class LossPt{
 	public string T;
 	public double L;
@@ -125,6 +132,7 @@ public class DataStore{
 	public List<EmotionEntry> E=new List<EmotionEntry>();
 	public List<NoiseEntry> N=new List<NoiseEntry>();
 	public List<SleepEntry> S=new List<SleepEntry>();
+	public List<SaltEntry> Salt=new List<SaltEntry>();
 	public List<MedTakeEntry> MedTakes=new List<MedTakeEntry>();
 	public NnModel Nn;
 	public DateTime? LastPopup;

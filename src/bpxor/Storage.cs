@@ -115,6 +115,7 @@ partial class Profile
 					foreach(EmotionEntry e in D.E.OrderBy(x=>x.T)) WriteRec(w,RecEmo,EmoPayload(e,pool));
 					foreach(NoiseEntry n2 in D.N.OrderBy(x=>x.T)) WriteRec(w,RecNoi,NoiPayload(n2,pool));
 					foreach(SleepEntry s2 in D.S.OrderBy(x=>x.T)) WriteRec(w,RecSleep,SleepPayload(s2,pool));
+					foreach(SaltEntry st in D.Salt.OrderBy(x=>x.T)) WriteRec(w,RecSalt,SaltPayload(st,pool));
 					foreach(MedTakeEntry mt in D.MedTakes.OrderBy(x=>x.T)) WriteRec(w,RecMedTake,MedTakePayload(mt,pool));
 					if(D.LastPopup!=null) WriteRec(w,RecPopup,RecPayload(w2=>w2.Write(D.LastPopup.Value.Ticks)));
 				}
@@ -165,7 +166,7 @@ partial class Profile
 	// data.bin только при компакции/миграции. nn.bin — модель, маленькая, переписывается всегда.
 	const uint BinMagic=0x4E4D5042;// "BPMN"
 	const byte BinVer=2;
-	public const byte RecStr=1,RecMeas=0x10,RecMeasDel=0x11,RecEmo=0x20,RecEmoDel=0x21,RecNoi=0x30,RecNoiDel=0x31,RecSleep=0x40,RecSleepDel=0x41,RecPopup=0x50,RecMedTake=0x60,RecMedTakeDel=0x61;
+	public const byte RecStr=1,RecMeas=0x10,RecMeasDel=0x11,RecEmo=0x20,RecEmoDel=0x21,RecNoi=0x30,RecNoiDel=0x31,RecSleep=0x40,RecSleepDel=0x41,RecPopup=0x50,RecMedTake=0x60,RecMedTakeDel=0x61,RecSalt=0x70,RecSaltDel=0x71;
 	Dictionary<string,int> _pool=new Dictionary<string,int>();
 	int _poolNext;
 	int _logRecords;
@@ -195,7 +196,7 @@ partial class Profile
 			w.Write((ushort)m.Sys); w.Write((ushort)m.Dia); w.Write((ushort)m.Pulse);// 6
 			byte fl=0;// биты присутствия опциональных полей
 			if(m.PressMm!=null)fl|=1; if(m.TempC!=null)fl|=2; if(m.Hum!=null)fl|=4; if(m.Kp!=null)fl|=8;
-			if(m.EmotionV!=null)fl|=16; if(m.SleepH!=null)fl|=32; if(m.SleepQ!=null)fl|=64;
+			if(m.EmotionV!=null)fl|=16; if(m.SleepH!=null)fl|=32; if(m.SleepQ!=null)fl|=64; if(m.PosArm!=null)fl|=128;
 			w.Write(fl);
 			if(m.PressMm!=null)w.Write(m.PressMm.Value);
 			if(m.TempC!=null)w.Write(m.TempC.Value);
@@ -204,6 +205,7 @@ partial class Profile
 			if(m.EmotionV!=null)w.Write((sbyte)m.EmotionV.Value);
 			if(m.SleepH!=null)w.Write(m.SleepH.Value);
 			if(m.SleepQ!=null)w.Write((byte)m.SleepQ.Value);
+			if(m.PosArm!=null)w.Write((byte)m.PosArm.Value);
 			w.Write((ushort)(string.IsNullOrEmpty(m.Wx)?0xFFFF:pool(m.Wx)));
 			w.Write((byte)Math.Min(255,m.Meds.Count));
 			foreach(string s3 in m.Meds.Take(255)) w.Write((ushort)pool(s3));
@@ -235,6 +237,18 @@ partial class Profile
 			byte[] nb=Encoding.UTF8.GetBytes(s2.Note??""); w.Write((ushort)nb.Length); w.Write(nb);
 		});
 	}
+	byte[] SaltPayload(SaltEntry st,Func<string,int> pool){
+		return RecPayload(w=>{
+			Guid g; Guid.TryParse(st.Id,out g);
+			w.Write(g.ToByteArray()); w.Write(st.T.Ticks); w.Write((byte)st.Val);
+			byte[] nb=Encoding.UTF8.GetBytes(st.Note??""); w.Write((ushort)nb.Length); w.Write(nb);
+		});
+	}
+	SaltEntry ReadSalt(BinaryReader p){
+		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64()); int v=p.ReadByte();
+		string note=Encoding.UTF8.GetString(p.ReadBytes(p.ReadUInt16()));
+		return new SaltEntry{Id=g.ToString("N"),T=t,Val=v,Note=note};
+	}
 	byte[] MedTakePayload(MedTakeEntry mt,Func<string,int> pool){
 		return RecPayload(w=>{
 			Guid g; Guid.TryParse(mt.Id,out g);
@@ -255,9 +269,10 @@ partial class Profile
 	public void AppendMeasurement(Measurement m){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMeas,MeasPayload(m,PoolWriter(w))); } catch{} } }
 	public void AppendEmotion(EmotionEntry e){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecEmo,EmoPayload(e,PoolWriter(w))); } catch{} } }
 	public void AppendNoise(NoiseEntry n2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecNoi,NoiPayload(n2,PoolWriter(w))); } catch{} } }
+	public void AppendSalt(SaltEntry st){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecSalt,SaltPayload(st,PoolWriter(w))); } catch{} } }
 	public void AppendSleep(SleepEntry s2){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecSleep,SleepPayload(s2,PoolWriter(w))); } catch{} } }
 	public void AppendMedTake(MedTakeEntry mt){ lock(Io){ try{ using(BinaryWriter w=OpenAppend()) WriteRec(w,RecMedTake,MedTakePayload(mt,PoolWriter(w))); } catch{} } }
-	public void AppendGuidRec(byte type,string id){ Guid g; if(Guid.TryParse(id,out g)){ if(type==RecMeasDel||type==RecEmoDel||type==RecNoiDel||type==RecSleepDel||type==RecMedTakeDel) _dead.Add(g.ToString("N")); AppendRec(type,RecPayload(w=>w.Write(g.ToByteArray()))); } }
+	public void AppendGuidRec(byte type,string id){ Guid g; if(Guid.TryParse(id,out g)){ if(type==RecMeasDel||type==RecEmoDel||type==RecNoiDel||type==RecSleepDel||type==RecMedTakeDel||type==RecSaltDel) _dead.Add(g.ToString("N")); AppendRec(type,RecPayload(w=>w.Write(g.ToByteArray()))); } }
 	void AppendPopup(){ if(D.LastPopup!=null) AppendRec(RecPopup,RecPayload(w=>w.Write(D.LastPopup.Value.Ticks))); }
 	bool SameId(string id,Guid g){ Guid g2; return Guid.TryParse(id,out g2)&&g2==g; }
 	string GetPool(Dictionary<int,string> pool,int id){ string s3; return pool.TryGetValue(id,out s3)?s3:""; }
@@ -273,6 +288,7 @@ partial class Profile
 		float? emo=(fl&16)!=0?(float?)p.ReadSByte():null;
 		float? sleepH=(fl&32)!=0?(float?)p.ReadSingle():null;
 		int? sleepQ=(fl&64)!=0?(int?)p.ReadByte():null;
+		int? posArm=(fl&128)!=0?(int?)p.ReadByte():null;
 		int wxId=p.ReadUInt16();
 		int mc=p.ReadByte(); List<string> meds=new List<string>();
 		for(int i2=0;i2<mc;i2++) meds.Add(GetPool(pool,p.ReadUInt16()));
@@ -283,7 +299,7 @@ partial class Profile
 			Id=g.ToString("N"),T=t,Sys=sys,Dia=dia,Pulse=pulse,
 			PressMm=press,TempC=temp,Hum=hum,Kp=kp,SleepH=sleepH,SleepQ=sleepQ,
 			EmotionV=emo,EmotionLabel=emo!=null?DataStore.EmotionLabel((int)emo.Value):"",
-			Wx=wxId==0xFFFF?"":GetPool(pool,wxId),Meds=meds,Noise=noise,Note=note};
+			Wx=wxId==0xFFFF?"":GetPool(pool,wxId),Meds=meds,Noise=noise,Note=note,PosArm=posArm};
 	}
 	EmotionEntry ReadEmo(BinaryReader p){
 		Guid g=new Guid(p.ReadBytes(16)); DateTime t=new DateTime(p.ReadInt64());
@@ -350,6 +366,12 @@ partial class Profile
 							D.S.Add(ss);
 						}
 						else if(type==RecSleepDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.S.RemoveAll(x=>SameId(x.Id,g)); }
+						else if(type==RecSalt){
+							SaltEntry st=ReadSalt(p);
+							D.Salt.RemoveAll(x=>x.Id==st.Id);
+							D.Salt.Add(st);
+						}
+						else if(type==RecSaltDel){ Guid g=new Guid(p.ReadBytes(16)); _dead.Add(g.ToString("N")); D.Salt.RemoveAll(x=>SameId(x.Id,g)); }
 						else if(type==RecMedTake){
 							MedTakeEntry mm2=ReadMedTake(p,pool);
 							D.MedTakes.RemoveAll(x=>x.Id==mm2.Id);

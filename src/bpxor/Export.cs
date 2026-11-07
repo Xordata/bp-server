@@ -236,6 +236,7 @@ partial class Profile
 				["emotions"]=JArray.FromObject(D.E.OrderBy(e=>e.T).ToList()),
 				["noises"]=JArray.FromObject(D.N.OrderBy(e=>e.T).ToList()),
 				["sleeps"]=JArray.FromObject(D.S.OrderBy(e=>e.T).ToList()),
+				["salts"]=JArray.FromObject(D.Salt.OrderBy(e=>e.T).ToList()),
 				["medtakes"]=JArray.FromObject(D.MedTakes.OrderBy(x=>x.T).ToList()),
 				["lastPopup"]=D.LastPopup!=null?(JToken)D.LastPopup.Value.ToString("yyyy-MM-dd HH:mm:ss"):JValue.CreateNull()
 			},
@@ -259,6 +260,7 @@ partial class Profile
 		if(d["emotions"] is JArray a2) nd.E=a2.ToObject<List<EmotionEntry>>()??new List<EmotionEntry>();
 		if(d["noises"] is JArray a3) nd.N=a3.ToObject<List<NoiseEntry>>()??new List<NoiseEntry>();
 		if(d["sleeps"] is JArray a4) nd.S=a4.ToObject<List<SleepEntry>>()??new List<SleepEntry>();
+		if(d["salts"] is JArray a6) nd.Salt=a6.ToObject<List<SaltEntry>>()??new List<SaltEntry>();
 		if(d["medtakes"] is JArray a5) nd.MedTakes=a5.ToObject<List<MedTakeEntry>>()??new List<MedTakeEntry>();
 		System.Func<string,bool> goodId=s=>{ Guid g; return Guid.TryParse(s,out g); };// Id обязан быть Guid: кривые строки ломают UI (onclick-инъекции)
 		nd.M=nd.M.Where(x=>goodId(x.Id)).ToList(); nd.E=nd.E.Where(x=>goodId(x.Id)).ToList(); nd.N=nd.N.Where(x=>goodId(x.Id)).ToList(); nd.S=nd.S.Where(x=>goodId(x.Id)).ToList(); nd.MedTakes=nd.MedTakes.Where(x=>goodId(x.Id)).ToList();

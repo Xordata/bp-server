@@ -117,6 +117,7 @@ static class AlarmScheduler{
 	public static async Task Run(CancellationToken ct){
 		while(!ct.IsCancellationRequested){
 			try{ await Task.Delay(30000,ct); }catch{ break; }
+			try{ Watchdog.Tick(); }catch{}
 			try{ TickAll(); }catch(Exception ex){ Console.WriteLine("scheduler: "+ex.Message); }
 		}
 	}
@@ -172,7 +173,7 @@ static class AlarmScheduler{
 		}
 		if(push&&!pushed&&cfg.EmailFallback&&!string.IsNullOrWhiteSpace(Program.ACfg.SmtpUser)){
 			string to=string.IsNullOrWhiteSpace(cfg.EmailTo)?uid:cfg.EmailTo;
-			try{ SmtpSender.Send(Program.ACfg,to,title,body); }catch(Exception ex){ Console.WriteLine("email "+uid+": "+ex.Message); }
+			try{ SmtpSender.Send(Program.ACfg,to,title,body); }catch(Exception ex){ Console.WriteLine("email "+uid+": "+ex.Message); Watchdog.MailFailInc(ex.Message); }
 		}
 	}
 }

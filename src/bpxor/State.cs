@@ -25,6 +25,7 @@ partial class Profile{
 			["emotions"]=JArray.FromObject(D.E.OrderByDescending(e=>e.T).ToList()),
 			["noises"]=JArray.FromObject(D.N.OrderByDescending(e=>e.T).ToList()),
 			["sleeps"]=JArray.FromObject(D.S.OrderByDescending(e=>e.T).ToList()),
+			["salts"]=JArray.FromObject(D.Salt.OrderByDescending(e=>e.T).ToList()),
 			["medtakes"]=JArray.FromObject(D.MedTakes.OrderByDescending(x=>x.T).Take(500).ToList()),
 			["medPkDb"]=JObject.FromObject(MedPkDb),
 			["nn"]=NnJson()
