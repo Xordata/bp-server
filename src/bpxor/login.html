@@ -51,7 +51,7 @@ var myLang=(function(){
  var n=(navigator.language||"ru").toLowerCase().slice(0,2);
  return LANGS.some(function(l){return l[0]===n;})?n:"ru";
 })();
-function pickLang(c){try{localStorage.setItem("bpxLang",c);}catch(e){}location.reload();}
+function pickLang(c){try{localStorage.setItem("bpxLang",c);sessionStorage.setItem("bpxLangPick",c);}catch(e){}location.reload();}
 document.documentElement.lang=myLang;
 document.getElementById("langs").innerHTML=LANGS.map(function(l){return '<a class="'+(l[0]===myLang?"on":"")+'" onclick="pickLang(\''+l[0]+'\')">'+l[1]+'</a>';}).join("");
 loadLang(myLang);
@@ -66,7 +66,18 @@ document.getElementById('f').onsubmit=async ev=>{
   const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({login:document.getElementById('login').value,pass:document.getElementById('pass').value})});
   const j=await r.json().catch(()=>({}));
-  if(r.ok&&j.ok){location='/';return;}
+  if(r.ok&&j.ok){
+   // Явный выбор языка на входе (клик по панели) пушится в аккаунт — иначе SPA возьмёт серверный cfg.Lang
+   // и выбор «подсосётся» обратно. Авто-определение браузера сюда не попадает (маркер ставит только pickLang).
+   try{
+    var pick=null;try{pick=sessionStorage.getItem("bpxLangPick");sessionStorage.removeItem("bpxLangPick");}catch(e0){}
+    if(pick){
+     var m=document.cookie.match(/(?:^|;\s*)bpxcsrf=([^;]+)/);
+     if(m)await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':m[1]},body:JSON.stringify({Lang:pick})}).catch(function(){});
+    }
+   }catch(e1){}
+   location='/';return;
+  }
   e.textContent=j.err?tr(j.err):tr('ошибка')+' '+r.status;
  }catch(ex){e.textContent=tr('сеть недоступна');}
  b.disabled=false;
