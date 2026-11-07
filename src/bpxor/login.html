@@ -21,6 +21,10 @@ button{width:100%;margin-top:20px;padding:8px;border:1px solid var(--accent);bor
 button:hover{background:var(--accent-h)}
 button:disabled{opacity:.6;cursor:wait}
 .err{color:var(--warn);font-size:13px;margin-top:14px;min-height:18px}
+.langs{margin-top:16px;padding-top:14px;border-top:1px solid var(--bd);display:flex;flex-wrap:wrap;gap:3px 9px;justify-content:center}
+.langs a{color:var(--mut);font-size:11.5px;text-decoration:none;cursor:pointer;padding:1px 3px;border-radius:3px}
+.langs a:hover{color:var(--fg)}
+.langs a.on{color:var(--accent);font-weight:bold}
 </style>
 </head>
 <body>
@@ -35,8 +39,22 @@ button:disabled{opacity:.6;cursor:wait}
 <button id="b" type="submit">Войти</button>
 <div class="err" id="e"></div>
 </form>
+<div class="langs" id="langs"></div>
 </div>
+<script src="/i18n.js"></script>
 <script>
+// Язык страницы входа: сохранённый выбор (bpxLang, тот же ключ, что у SPA и help) > язык браузера > ru.
+// Переключение = localStorage + reload (тот же приём, что setLang в SPA: live-переобход ненадёжен).
+const LANGS=[["ru","Русский"],["en","English"],["de","Deutsch"],["fr","Français"],["pt","Português"],["es","Español"],["zh","中文"],["ja","日本語"]];
+var myLang=(function(){
+ try{var s=localStorage.getItem("bpxLang");if(s&&LANGS.some(function(l){return l[0]===s;}))return s;}catch(e){}
+ var n=(navigator.language||"ru").toLowerCase().slice(0,2);
+ return LANGS.some(function(l){return l[0]===n;})?n:"ru";
+})();
+function pickLang(c){try{localStorage.setItem("bpxLang",c);}catch(e){}location.reload();}
+document.documentElement.lang=myLang;
+document.getElementById("langs").innerHTML=LANGS.map(function(l){return '<a class="'+(l[0]===myLang?"on":"")+'" onclick="pickLang(\''+l[0]+'\')">'+l[1]+'</a>';}).join("");
+loadLang(myLang);
 var mq=matchMedia('(prefers-color-scheme:dark)');
 (function up(){var m=document.querySelector('meta[name=theme-color]');if(m)m.content=mq.matches?'#14161a':'#2f5d8a';})();
 if(mq.addEventListener)mq.addEventListener('change',function(){var m=document.querySelector('meta[name=theme-color]');if(m)m.content=mq.matches?'#14161a':'#2f5d8a';});
@@ -49,8 +67,8 @@ document.getElementById('f').onsubmit=async ev=>{
    body:JSON.stringify({login:document.getElementById('login').value,pass:document.getElementById('pass').value})});
   const j=await r.json().catch(()=>({}));
   if(r.ok&&j.ok){location='/';return;}
-  e.textContent=j.err||('ошибка '+r.status);
- }catch(ex){e.textContent='сеть недоступна';}
+  e.textContent=j.err?tr(j.err):tr('ошибка')+' '+r.status;
+ }catch(ex){e.textContent=tr('сеть недоступна');}
  b.disabled=false;
 };
 </script>

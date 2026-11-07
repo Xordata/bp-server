@@ -414,5 +414,15 @@
  "Пора измерить давление.": "Zeit, den Blutdruck zu messen.",
  "Пора принять: ": "Einnahme fällig: ",
  "Отметьте приём во вкладке «Лекарства».": "Markieren Sie die Einnahme im Tab Medikamente.",
- "порт": "Port"
+ "порт": "Port",
+ "Дневник АД — вход": "Blutdruck-Tagebuch — Anmeldung",
+ "bp.xor.world — вход почтовым паролем @xor.world": "bp.xor.world — Anmeldung mit Ihrem @xor.world E-Mail-Passwort",
+ "Почта": "E-Mail",
+ "Пароль": "Passwort",
+ "Войти": "Anmelden",
+ "неверный логин или пароль": "ungültiger Login oder Passwort",
+ "слишком много попыток, подождите": "zu viele Versuche, bitte warten",
+ "достигнут лимит пользователей сервера": "Nutzerlimit des Servers erreicht",
+ "сеть недоступна": "Netzwerk nicht verfügbar",
+ "ошибка": "Fehler"
 }
