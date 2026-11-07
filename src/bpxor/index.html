@@ -471,7 +471,7 @@ async function loadState(){
   S.measLoadedAll=(S.measTotal==null)||(S.measTotal<=(S.measurements||[]).length);
   if(!tzSent&&S.cfg){tzSent=true;try{const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(S.cfg.Tz!==tz)apiPost("/api/config",{Tz:tz});}catch(e){}}
   renderHeader();
-  if(act!=="cfg")renderActive(); // не затираем форму настроек во время ввода
+  if(act!=="cfg")renderActive();else fillCfg(); // форму в модалке не затираем, но сводку карточек обновляем всегда
 }
 async function loadDelta(){
   if(!S||!SYNC){await loadState();return;}
@@ -490,7 +490,7 @@ async function loadDelta(){
   if(d.nn)S.nn=d.nn;
   if(d.medPkDb)S.medPkDb=d.medPkDb;
   renderHeader();
-  if(act!=="cfg")renderActive();
+  if(act!=="cfg")renderActive();else fillCfg();
 }
 // upsert по Id + тумстоуны, сортировка новые-first — та же семантика, что у загрузки журнала
 function mergeArr(key,adds,dels){
@@ -1147,7 +1147,8 @@ async function geoFind(){
   window.__geo=rs;
   box.innerHTML=rs.map((r,i)=>`<button onclick="geoPick(${i})">${esc(r.n)}${r.a?", "+esc(r.a):""}</button>`).join("");
 }
-function geoPick(i){const r=window.__geo[i];$("c-lat").value=r.lat;$("c-lon").value=r.lon;$("geo-res").innerHTML="";flash("Координаты подставлены — нажмите «Сохранить»");}
+function geoPick(i){const r=window.__geo[i];$("c-lat").value=r.lat;$("c-lon").value=r.lon;$("geo-res").innerHTML="";
+  S.cfg.Lat=r.lat;S.cfg.Lon=r.lon;apiPost("/api/config",{Lat:r.lat,Lon:r.lon}).then(j=>{flash(j.ok?"Координаты сохранены":(j.err||"Ошибка"),!!j.ok);loadState();});}
 function saveCfgGen(){const c=S.cfg;c.Lat=+$("c-lat").value;c.Lon=+$("c-lon").value;c.PollMin=+$("c-poll").value;
   c.AlarmFile=$("c-alarm").value.trim();c.AlarmAheadMin=+$("c-ahead").value||0;postCfg();}
 function openCfgUser(){

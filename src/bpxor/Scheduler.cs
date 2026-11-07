@@ -15,6 +15,8 @@ namespace BpMonitor{
 // users/<uid>/alarms.json — рестарт сервера не плодит дубли и догоняет пропущенное за 30 мин.
 static class AlarmScheduler{
 	public const int CatchUpMin=30;
+	// авто-стоп звонка: нет реакции N минут — считаемdismissed, вкладки замолкают (SSE + фолбэк /api/alarm/state)
+	public const int RingMaxMin=15;
 	public static string DataRoot;
 
 	// должен ли будильник сработать сегодня (перенесено из Profile, семантика без изменений)
@@ -150,6 +152,12 @@ static class AlarmScheduler{
 			Profile lp=null; try{ lp=UserStore.Peek(uid); }catch{}
 			if(lp!=null){ lock(lp.Sync){ for(int i=0;i<cfg.Alarms.Count&&i<lp.Cfg.Alarms.Count;i++) lp.Cfg.Alarms[i].Anchor=cfg.Alarms[i].Anchor; lp.SaveCfg(); } }
 			else{ try{ File.WriteAllText(cfgPath,JsonConvert.SerializeObject(cfg,Formatting.Indented)); }catch{} }
+		}
+		// авто-остановка: звонок висит > RingMaxMin без реакции — гасим как dismiss (вкладки замолкают по SSE/поллингу)
+		if(st.RingingKey!=""&&nowUtc-st.RingingAt>=TimeSpan.FromMinutes(RingMaxMin)){
+			string rk=st.RingingKey; st.DismissedKey=rk; st.RingingKey=""; st.RingingLabel="";
+			try{ EventHub.Publish(uid,JObject.FromObject(new{t="dismiss",key=rk}).ToString(Formatting.None)); }catch{}
+			due.Changed=true;
 		}
 		if(!due.Changed)return;
 		st.Save();

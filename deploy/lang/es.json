@@ -447,5 +447,6 @@
  "Укажите название города": "Indique el nombre de la ciudad",
  "Геокодер недоступен": "geocodificador no disponible",
  "Не найдено": "no encontrado",
- "Координаты подставлены — нажмите «Сохранить»": "coordenadas rellenadas — pulse «Guardar»"
+ "Координаты подставлены — нажмите «Сохранить»": "coordenadas rellenadas — pulse «Guardar»",
+ "Координаты сохранены": "Coordenadas guardadas"
 }
