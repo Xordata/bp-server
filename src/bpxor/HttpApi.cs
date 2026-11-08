@@ -154,7 +154,7 @@ static class HttpApi{
 			if(jo["meds"] is JArray) m.Meds=jo["meds"].Values<string>().Where(x=>x!="").ToList();
 			if(jo["posArm"]!=null&&jo["posArm"].Type!=Newtonsoft.Json.Linq.JTokenType.Null){ int pa=(int)jo["posArm"]; m.PosArm=(pa>=0&&pa<=11)?(int?)pa:null; }
 			p.Snapshot(m);
-			if(m.T<=DateTime.Now.AddHours(-2)) p.FillWx(m);
+			if(m.T<=AlarmScheduler.LocalNow(p.Cfg.Tz,DateTime.UtcNow).AddHours(-2)) p.FillWx(m);
 			p.D.M.Add(m);
 			p.Train();
 			p.AppendMeasurement(m);
@@ -170,7 +170,7 @@ static class HttpApi{
 				m.Dia=(int)jo["dia"];
 				m.Pulse=(int)jo["pulse"];
 				m.Note=jo["note"]!=null?jo["note"].ToString():"";
-				if(m.T<=DateTime.Now.AddHours(-2)) p.FillWx(m);
+				if(m.T<=AlarmScheduler.LocalNow(p.Cfg.Tz,DateTime.UtcNow).AddHours(-2)) p.FillWx(m);
 				if(jo["meds"] is JArray) m.Meds=jo["meds"].Values<string>().Where(x=>x!="").ToList();
 			if(jo["posArm"]!=null&&jo["posArm"].Type!=Newtonsoft.Json.Linq.JTokenType.Null){ int pa=(int)jo["posArm"]; m.PosArm=(pa>=0&&pa<=11)?(int?)pa:null; }
 				p.Train();
@@ -275,7 +275,7 @@ static class HttpApi{
 		app.MapPost("/api/medtake",ctx=>Post(ctx,(p,jo,body)=>{
 			string med=jo["med"]!=null?jo["med"].ToString().Trim():"";
 			if(string.IsNullOrWhiteSpace(med)) return Json(new{ok=false,err="не указано лекарство"});
-			DateTime t=DateTime.Now;
+			DateTime t=AlarmScheduler.LocalNow(p.Cfg.Tz,DateTime.UtcNow);// сервер в UTC — ставим локальное время юзера (как у измерений, которые приходят с клиентским t)
 			if(jo["t"]!=null){ try{ t=p.JT(jo,"t"); }catch{} }
 			MedTakeEntry mt=new MedTakeEntry{Id=Guid.NewGuid().ToString("N"),T=t,Med=med};
 			p.D.MedTakes.Add(mt);
@@ -365,7 +365,7 @@ static class HttpApi{
 					}
 					if(data.Length>8*1024*1024) r=Json(new{ok=false,err="файл слишком большой для отправки"});
 					else{
-						string text=LangPacks.Tr(p.Cfg.Lang,"Экспорт дневника АД с bp.xor.world.")+"\r\n"+LangPacks.Tr(p.Cfg.Lang,"Файл")+": "+fname+"\r\n"+LangPacks.Tr(p.Cfg.Lang,"Дата")+": "+DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+						string text=LangPacks.Tr(p.Cfg.Lang,"Экспорт дневника АД с bp.xor.world.")+"\r\n"+LangPacks.Tr(p.Cfg.Lang,"Файл")+": "+fname+"\r\n"+LangPacks.Tr(p.Cfg.Lang,"Дата")+": "+AlarmScheduler.LocalNow(p.Cfg.Tz,DateTime.UtcNow).ToString("yyyy-MM-dd HH:mm");
 						try{ SmtpSender.Send(Program.ACfg,to,"BP Monitor: "+fname,text,fname,ctype,data); r=Json(new{ok=true,to=to,file=fname}); }
 						catch(Exception ex){ r=Json(new{ok=false,err="smtp: "+ex.Message}); }
 					}
