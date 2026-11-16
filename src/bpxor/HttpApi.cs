@@ -298,8 +298,8 @@ static class HttpApi{
 		app.MapPost("/api/medpk",ctx=>Post(ctx,(p,jo,body)=>{
 			// полная замена справочника ФК: {"entries":{"имя":[T½,длительность,аннотация?],...}}
 			// встроенные записи эталона восстанавливаются автоматически; аннотация — только по-русски
-			string perr; System.Collections.Generic.Dictionary<string,MedPkEntry> nd;
-			if(!p.ParseMedPk(jo["entries"] as JObject,out nd,out perr,true)) return Json(new{ok=false,err=perr??"пустой справочник"});
+			System.Collections.Generic.Dictionary<string,MedPkEntry> nd;
+			if(!p.ParseMedPk(jo["entries"] as JObject,out nd)) return Json(new{ok=false,err="пустой справочник"});
 			nd=p.WithMedPkDefaults(nd);
 			p.MedPkDb=nd;
 			p.SaveMedPk();

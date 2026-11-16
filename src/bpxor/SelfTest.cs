@@ -290,9 +290,9 @@ partial class Profile
 			if(MedNoteFor("Тест-Мед!")!="таблетки 5 мг, витамин B6") throw new Exception("MedNoteFor не вернул аннотацию");
 			(double half,double dur)=MedKtFor("Тест-Мед!");// нормализация названия
 			if(Math.Abs(half-6)>1e-9||Math.Abs(dur-18)>1e-9) throw new Exception("MedKtFor не взял значения из справочника");
-			if(!MedNoteOk("таблетки 5 мг")||MedNoteOk("vitamin B")||MedNoteOk("по 10 pieces")) throw new Exception("MedNoteOk: фильтр языка");
-			string e2; Dictionary<string,MedPkEntry> nd2;
-			if(ParseMedPk(new JObject{["тестмед"]=new JArray(6.0,18.0,"English only note")},out nd2,out e2,true)||e2==null||!e2.Contains("только по-русски")) throw new Exception("строгая проверка аннотации не сработала");
+			if(string.IsNullOrEmpty(MedPkDb["небилет"].Note)) throw new Exception("готовая аннотация эталона не подставилась");
+			Dictionary<string,MedPkEntry> nd2;
+			if(!ParseMedPk(new JObject{["тестмед"]=new JArray(6.0,18.0,"English note ok")},out nd2)||nd2["тестмед"].Note!="English note ok") throw new Exception("аннотация на другом языке не принята");
 			MedPkDb.Remove("тестмед"); SaveMedPk();
 		});
 		check("MedTake: round-trip и union с измерениями",()=>{

@@ -287,8 +287,8 @@ partial class Profile
 		} catch(Exception ex){ Log("preimport backup: "+ex.Message); }
 		Cfg=nc; D=nd; D.Nn=nnd;
 		if(j["medpk"] is JObject mp){
-			string pkerr; Dictionary<string,MedPkEntry> md;
-			if(ParseMedPk(mp,out md,out pkerr,false)&&md.Count>0){ MedPkDb=WithMedPkDefaults(md); SaveMedPk(); }
+			Dictionary<string,MedPkEntry> md;
+			if(ParseMedPk(mp,out md)&&md.Count>0){ MedPkDb=WithMedPkDefaults(md); SaveMedPk(); }
 		}
 		Save();// config.json + полная перезапись data.bin + SaveNn
 		EnsureNnDim();// размеры/лекарства из файла могут не совпадать -> пересборка размерности
