@@ -62,7 +62,7 @@ partial class Profile{
 		if(cfgRev!=c){ r["cfg"]=MaskToken(JObject.FromObject(Cfg)); r["medPk"]=MedPkJson(); changed=true; }
 		if(nnRev!=n||wxRev!=w){ r["nn"]=NnJson(); changed=true; }
 		if(wxRev!=w){ r["weather"]=WeatherJson(); changed=true; }
-		if(pkRev!=pk){ r["medPkDb"]=JObject.FromObject(MedPkDb); changed=true; }
+		if(pkRev!=pk){ r["medPkDb"]=MedPkDbJson(); changed=true; }
 		r["changed"]=changed;
 		return r;
 	}

@@ -89,7 +89,8 @@ static class AlarmScheduler{
 		if(cfg.MedTimes!=null){
 			foreach(KeyValuePair<string,List<string>> kv in cfg.MedTimes){
 				if(kv.Value==null)continue;
-				string med=cfg.Meds.FirstOrDefault(x=>NormMedStatic(x)==kv.Key)??kv.Key;
+				string med=cfg.Meds.FirstOrDefault(x=>NormMedStatic(x)==kv.Key);
+				if(med==null)continue;// лекарство убрано из списка — напоминание молчит (расписание храним на случай возврата)
 				foreach(string tm in kv.Value){
 					string[] parts=(tm??"").Trim().Split(':');
 					if(parts.Length!=2)continue;

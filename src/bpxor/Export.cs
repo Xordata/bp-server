@@ -241,7 +241,7 @@ partial class Profile
 				["lastPopup"]=D.LastPopup!=null?(JToken)D.LastPopup.Value.ToString("yyyy-MM-dd HH:mm:ss"):JValue.CreateNull()
 			},
 			["nn"]=D.Nn!=null?JObject.FromObject(D.Nn):null,
-			["medpk"]=JObject.FromObject(MedPkDb)
+			["medpk"]=MedPkDbJson()
 		};
 	}
 	public string ImportAll(JObject j){
@@ -287,14 +287,8 @@ partial class Profile
 		} catch(Exception ex){ Log("preimport backup: "+ex.Message); }
 		Cfg=nc; D=nd; D.Nn=nnd;
 		if(j["medpk"] is JObject mp){
-			Dictionary<string,double[]> md=new Dictionary<string,double[]>();
-			foreach(KeyValuePair<string,JToken> kv in mp){
-				JArray a=kv.Value as JArray; if(a==null||a.Count<2) continue;
-				string k=NormMed(kv.Key); if(k=="") continue;
-				double h=(double?)a[0]??0,dd=(double?)a[1]??0;
-				if(h>0&&dd>0) md[k]=new[]{h,dd};
-			}
-			if(md.Count>0){ MedPkDb=md; SaveMedPk(); }
+			string pkerr; Dictionary<string,MedPkEntry> md;
+			if(ParseMedPk(mp,out md,out pkerr,false)&&md.Count>0){ MedPkDb=WithMedPkDefaults(md); SaveMedPk(); }
 		}
 		Save();// config.json + полная перезапись data.bin + SaveNn
 		EnsureNnDim();// размеры/лекарства из файла могут не совпадать -> пересборка размерности

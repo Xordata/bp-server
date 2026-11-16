@@ -27,7 +27,8 @@ partial class Profile{
 			["sleeps"]=JArray.FromObject(D.S.OrderByDescending(e=>e.T).ToList()),
 			["salts"]=JArray.FromObject(D.Salt.OrderByDescending(e=>e.T).ToList()),
 			["medtakes"]=JArray.FromObject(D.MedTakes.OrderByDescending(x=>x.T).Take(500).ToList()),
-			["medPkDb"]=JObject.FromObject(MedPkDb),
+			["medPkDb"]=MedPkDbJson(),
+			["medPkBuiltin"]=new JArray(MedPkDefault.Keys),
 			["nn"]=NnJson()
 		};
 	}
@@ -39,7 +40,7 @@ partial class Profile{
 		return wxJ;
 	}
 	public JObject MedPkJson(){
-		return JObject.FromObject(Cfg.Meds.GroupBy(med=>med).ToDictionary(g=>g.Key,g=>{var kt=MedKtFor(g.Key);return new{half=kt.half,dur=kt.dur,known=MedPkDb.Any(kv=>NormMed(g.Key).Contains(kv.Key))};}));
+		return JObject.FromObject(Cfg.Meds.GroupBy(med=>med).ToDictionary(g=>g.Key,g=>{var kt=MedKtFor(g.Key);return new{half=kt.half,dur=kt.dur,known=MedPkDb.Any(kv=>NormMed(g.Key).Contains(kv.Key)),note=MedNoteFor(g.Key)};}));
 	}
 	public JObject NnJson(){
 		(double sys,double dia) p=PredictNow();

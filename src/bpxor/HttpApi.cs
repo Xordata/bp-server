@@ -296,16 +296,11 @@ static class HttpApi{
 			return Json(new{ok=true});
 		}));
 		app.MapPost("/api/medpk",ctx=>Post(ctx,(p,jo,body)=>{
-			System.Collections.Generic.Dictionary<string,double[]> nd=new System.Collections.Generic.Dictionary<string,double[]>();
-			JObject e=jo["entries"] as JObject;
-			if(e!=null) foreach(var kv in e){
-				JArray a=kv.Value as JArray; if(a==null||a.Count<2) continue;
-				string k=p.NormMed(kv.Key); if(k=="") continue;
-				double h,d;
-				if(double.TryParse((string)a[0],System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out h)
-					&&double.TryParse((string)a[1],System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out d)&&h>0&&d>0) nd[k]=new[]{h,d};
-			}
-			if(nd.Count==0) return Json(new{ok=false,err="пустой справочник"});
+			// полная замена справочника ФК: {"entries":{"имя":[T½,длительность,аннотация?],...}}
+			// встроенные записи эталона восстанавливаются автоматически; аннотация — только по-русски
+			string perr; System.Collections.Generic.Dictionary<string,MedPkEntry> nd;
+			if(!p.ParseMedPk(jo["entries"] as JObject,out nd,out perr,true)) return Json(new{ok=false,err=perr??"пустой справочник"});
+			nd=p.WithMedPkDefaults(nd);
 			p.MedPkDb=nd;
 			p.SaveMedPk();
 			p.Train();

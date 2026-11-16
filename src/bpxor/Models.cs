@@ -27,6 +27,7 @@ public class MedKt{
 	public double HalfH=8;// период полувыведения, ч
 	public double DurH=12;// длительность действия, ч
 }
+public class MedPkEntry{ public double Half; public double Dur; public string Note; }// запись справочника ФК: T½/действие + аннотация (только по-русски)
 public class MedTakeEntry{
 	public string Id;
 	public DateTime T;

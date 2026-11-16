@@ -275,17 +275,24 @@ partial class Profile
 			AppendMeasurement(new Measurement{Id=Guid.NewGuid().ToString("N"),T=DateTime.Now,Sys=122,Dia=81,Pulse=69});
 			if(SyncEtag==e1) throw new Exception("ETag не прореагировал на append");
 		});
-		check("medpk.json: создание из эталона, чтение, MedKtFor",()=>{
+		check("medpk.json: эталон, аннотации, защита встроенных записей, MedKtFor",()=>{
 			string p=Path.Combine(ExeDir,"medpk.json");
 			if(File.Exists(p)) File.Delete(p);
 			LoadMedPk();
 			if(!File.Exists(p)) throw new Exception("medpk.json не создан");
 			if(!MedPkDb.ContainsKey("эналаприл")) throw new Exception("эталон не записан");
-			MedPkDb["тестмед"]=new[]{6.0,18.0}; SaveMedPk();
+			MedPkDb["тестмед"]=new MedPkEntry{Half=6,Dur=18,Note="таблетки 5 мг, витамин B6"}; SaveMedPk();
+			MedPkDb.Remove("небилет"); SaveMedPk();// «по умолчанию» не удаляется — вернётся при загрузке
 			MedPkDb.Clear(); LoadMedPk();
 			if(!MedPkDb.ContainsKey("тестмед")) throw new Exception("пользовательская запись потеряна при перезагрузке");
+			if(!MedPkDb.ContainsKey("небилет")) throw new Exception("встроенная запись не восстановилась из эталона");
+			if(MedPkDb["тестмед"].Note!="таблетки 5 мг, витамин B6") throw new Exception("аннотация потеряна при перезагрузке");
+			if(MedNoteFor("Тест-Мед!")!="таблетки 5 мг, витамин B6") throw new Exception("MedNoteFor не вернул аннотацию");
 			(double half,double dur)=MedKtFor("Тест-Мед!");// нормализация названия
 			if(Math.Abs(half-6)>1e-9||Math.Abs(dur-18)>1e-9) throw new Exception("MedKtFor не взял значения из справочника");
+			if(!MedNoteOk("таблетки 5 мг")||MedNoteOk("vitamin B")||MedNoteOk("по 10 pieces")) throw new Exception("MedNoteOk: фильтр языка");
+			string e2; Dictionary<string,MedPkEntry> nd2;
+			if(ParseMedPk(new JObject{["тестмед"]=new JArray(6.0,18.0,"English only note")},out nd2,out e2,true)||e2==null||!e2.Contains("только по-русски")) throw new Exception("строгая проверка аннотации не сработала");
 			MedPkDb.Remove("тестмед"); SaveMedPk();
 		});
 		check("MedTake: round-trip и union с измерениями",()=>{
@@ -455,8 +462,8 @@ partial class Profile
 				new AlarmDef{Time="10:00",Mode="everyN",EveryN=2,Anchor="20261101"},
 				new AlarmDef{Time="10:00",Mode="everyN",EveryN=2,Anchor="20261102"}
 			};
-			cfg.MedTimes=new Dictionary<string,List<string>>{{"тестмед",new List<string>{"10:00","23:00"}}};
-			cfg.Meds=new List<string>{"Тест-Мед!"};
+			cfg.MedTimes=new Dictionary<string,List<string>>{{"тестмед",new List<string>{"10:00","23:00"}},{"крестор",new List<string>{"10:00"}}};
+			cfg.Meds=new List<string>{"Тест-Мед!"};// «крестор» не в списке — напоминание-призрак глушится
 			AlarmScheduler.State st=new AlarmScheduler.State();
 			AlarmScheduler.Due due=AlarmScheduler.ComputeDue(cfg,st,nowUtc);
 			if(due.AlarmKeys.Count!=2) throw new Exception("должны: days(чт) + everyN(4 дня от якоря N=2), получили "+due.AlarmKeys.Count);

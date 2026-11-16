@@ -448,5 +448,11 @@
  "Геокодер недоступен": "géocodeur indisponible",
  "Не найдено": "introuvable",
  "Координаты подставлены — нажмите «Сохранить»": "coordonnées remplies — cliquez sur «Enregistrer»",
- "Координаты сохранены": "Coordonnées enregistrées"
+ "Координаты сохранены": "Coordonnées enregistrées",
+ "Аннотация": "Annotation",
+ "по-русски": "en russe",
+ "справочное значение по умолчанию — удаление недоступно": "entrée de référence par défaut — suppression impossible",
+ "Аннотация должна быть только по-русски": "L'annotation doit être uniquement en russe",
+ "Встроенные записи справочника (по умолчанию) удалить нельзя — только править; удалять можно только добавленные вручную. Аннотация — только по-русски.": "Les entrées de référence intégrées (par défaut) ne peuvent pas être supprimées — seulement modifiées ; seules les entrées ajoutées manuellement peuvent être supprimées. L'annotation est en russe uniquement.",
+ "Наведение на название лекарства показывает аннотацию из справочника.": "Survolez le nom d'un médicament pour voir son annotation de référence."
 }

@@ -87,27 +87,62 @@ partial class Profile
 	};
 	// Рабочий справочник: грузится из medpk.json рядом с exe (правится без пересборки —
 	// руками или во вкладке «Лекарства»); при отсутствии/битости файла создаётся из эталона.
-	public Dictionary<string,double[]> MedPkDb=new Dictionary<string,double[]>(MedPkDefault);
+	// Формат medpk.json: {"имя":[T½,действие]} или {"имя":[T½,действие,"аннотация"]}.
+	// Встроенные записи эталона («по умолчанию») удалить нельзя — возвращаются при загрузке
+	// и при сохранении справочника; аннотация принимается только по-русски.
+	public Dictionary<string,MedPkEntry> MedPkDb=new Dictionary<string,MedPkEntry>();
 	string MedPkPath{ get{ return Path.Combine(ExeDir,"medpk.json"); } }
+	// аннотация по-русски: обязательна кириллица, запрещены латинские слова (одиночные B6/Q10 — можно)
+	public static bool MedNoteOk(string s){
+		if(string.IsNullOrEmpty(s)) return true;
+		if(s.Length>300) return false;
+		bool cyr=false;
+		foreach(char ch in s) if((ch>='\u0410'&&ch<='\u044f')||ch=='\u0401'||ch=='\u0451'){ cyr=true; break; }
+		if(!cyr) return false;
+		return !System.Text.RegularExpressions.Regex.IsMatch(s,"[A-Za-z]{2,}");
+	}
+	// парсинг {"имя":[h,d,note?]}; strict=true — ошибка на не-русской аннотации (POST),
+	// strict=false — толерантно (файл/импорт): плохую аннотацию отбрасываем, запись держим
+	public bool ParseMedPk(JObject e,out Dictionary<string,MedPkEntry> nd,out string err,bool strict){
+		nd=new Dictionary<string,MedPkEntry>(); err=null;
+		if(e==null) return false;
+		foreach(KeyValuePair<string,JToken> kv in e){
+			JArray a=kv.Value as JArray; if(a==null||a.Count<2) continue;
+			string k=NormMed(kv.Key); if(k=="") continue;
+			double h=(double?)a[0]??0,d=(double?)a[1]??0;
+			if(!(h>0&&d>0)) continue;
+			string note=a.Count>=3?((string)a[2]??"").Trim():"";
+			if(note!=""){ if(!MedNoteOk(note)){ if(strict){ err="аннотация «"+kv.Key+"» — только по-русски"; return false; } note=""; } }
+			nd[k]=new MedPkEntry{Half=h,Dur=d,Note=note};
+		}
+		return nd.Count>0;
+	}
+	public Dictionary<string,MedPkEntry> WithMedPkDefaults(Dictionary<string,MedPkEntry> nd){
+		foreach(KeyValuePair<string,double[]> kv in MedPkDefault)
+			if(!nd.ContainsKey(kv.Key)) nd[kv.Key]=new MedPkEntry{Half=kv.Value[0],Dur=kv.Value[1]};
+		return nd;
+	}
+	public JObject MedPkDbJson(){
+		JObject j=new JObject();
+		foreach(KeyValuePair<string,MedPkEntry> kv in MedPkDb){
+			JArray a=new JArray(kv.Value.Half,kv.Value.Dur);
+			if(!string.IsNullOrEmpty(kv.Value.Note)) a.Add(kv.Value.Note);
+			j[kv.Key]=a;
+		}
+		return j;
+	}
 	public void LoadMedPk(){
 		try{
 			if(File.Exists(MedPkPath)){
-				JObject j=JObject.Parse(File.ReadAllText(MedPkPath,Encoding.UTF8));
-				Dictionary<string,double[]> nd=new Dictionary<string,double[]>();
-				foreach(KeyValuePair<string,JToken> kv in j){
-					JArray a=kv.Value as JArray; if(a==null||a.Count<2) continue;
-					string k=NormMed(kv.Key); if(k=="") continue;
-					double h=(double?)a[0]??0,d=(double?)a[1]??0;
-					if(h>0&&d>0) nd[k]=new[]{h,d};
-				}
-				if(nd.Count>0){ MedPkDb=nd; return; }
+				string err; Dictionary<string,MedPkEntry> nd;
+				if(ParseMedPk(JObject.Parse(File.ReadAllText(MedPkPath,Encoding.UTF8)),out nd,out err,false)){ MedPkDb=WithMedPkDefaults(nd); return; }
 			}
 		} catch{ Quarantine(MedPkPath); }// битый справочник спасён от перезаписи, ставим эталон
-		MedPkDb=new Dictionary<string,double[]>(MedPkDefault);
+		MedPkDb=WithMedPkDefaults(new Dictionary<string,MedPkEntry>());
 		SaveMedPk();
 	}
 	public void SaveMedPk(){
-		lock(Io){ try{ File.WriteAllText(MedPkPath,JsonConvert.SerializeObject(MedPkDb,Formatting.Indented)); } catch{} }
+		lock(Io){ try{ File.WriteAllText(MedPkPath,MedPkDbJson().ToString(Formatting.Indented)); } catch{} }
 	}
 	public string NormMed(string s){
 		return new string((s??"").ToLowerInvariant().Replace('ё','е').Where(char.IsLetterOrDigit).ToArray());
@@ -117,9 +152,16 @@ partial class Profile
 		string n=NormMed(name);
 		if(Cfg.MedKt!=null) foreach(KeyValuePair<string,MedKt> kv in Cfg.MedKt)
 			if(kv.Value!=null&&NormMed(kv.Key)==n) return (Math.Max(0.25,kv.Value.HalfH),Math.Max(0.5,kv.Value.DurH));
-		foreach(KeyValuePair<string,double[]> kv in MedPkDb)
-			if(n==kv.Key||n.Contains(kv.Key)) return (kv.Value[0],kv.Value[1]);
+		foreach(KeyValuePair<string,MedPkEntry> kv in MedPkDb)
+			if(n==kv.Key||n.Contains(kv.Key)) return (kv.Value.Half,kv.Value.Dur);
 		return (8.0,12.0);
+	}
+	// аннотация справочника для лекарства (первое совпадение с непустой аннотацией)
+	public string MedNoteFor(string name){
+		string n=NormMed(name);
+		foreach(KeyValuePair<string,MedPkEntry> kv in MedPkDb)
+			if((n==kv.Key||n.Contains(kv.Key))&&!string.IsNullOrEmpty(kv.Value.Note)) return kv.Value.Note;
+		return "";
 	}
 	// времена приёма каждого лекарства: отметки приёма (журнал «Лекарства») + лекарства,
 	// отмеченные на измерениях. Фичи НН строятся на фактических приёмах, а не только на ручном вводе
